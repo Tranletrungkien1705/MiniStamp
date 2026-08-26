@@ -1,0 +1,31 @@
+@{
+    ViewData["Title"] = "Bảng điều khiển";
+    var d = (StampDash)ViewBag.Dash;
+}
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Sản phẩm</div><div class="stat-num">@d.Products</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Lô tem</div><div class="stat-num">@d.Batches</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Tem đã sinh</div><div class="stat-num text-danger">@d.Stamps.ToString("N0")</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Lượt quét</div><div class="stat-num">@d.Scans.ToString("N0")</div></div></div></div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Tem theo sản phẩm</h6>
+        @foreach (var (name, count) in d.ByProduct)
+        {
+            var pct = d.Stamps == 0 ? 0 : count * 100 / d.Stamps;
+            <div class="mb-2">
+                <div class="d-flex justify-content-between small"><span>@name</span><span class="text-muted">@count</span></div>
+                <div class="progress" style="height:7px"><div class="progress-bar bg-danger" style="width:@pct%"></div></div>
+            </div>
+        }
+        @if (d.ByProduct.Count == 0) { <div class="text-muted">Chưa có tem.</div> }
+    </div></div></div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-2">Kích hoạt bảo hành</h6>
+        <div class="stat-num text-success">@d.Activated.ToString("N0")</div>
+        <div class="text-muted small mb-3">tem đã được người dùng cuối kích hoạt</div>
+        <a href="/Batch/Create" class="btn btn-primary w-100"><i class="bi bi-qr-code me-1"></i>Sinh lô tem mới</a>
+        <a href="/Verify" target="_blank" class="btn btn-outline-primary w-100 mt-2"><i class="bi bi-search me-1"></i>Mở trang tra cứu công khai</a>
+    </div></div></div>
+</div>

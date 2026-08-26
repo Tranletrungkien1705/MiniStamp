@@ -1,0 +1,18 @@
+@model List<Product>
+@{ ViewData["Title"] = "Sản phẩm"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Danh mục sản phẩm</h6>
+        <a href="/Product/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm sản phẩm</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã</th><th>Tên</th><th>Nhà SX</th><th>Bảo hành</th></tr></thead>
+        <tbody>
+        @foreach (var p in Model)
+        {
+            <tr><td class="fw-semibold">@p.Code</td><td>@p.Name</td><td class="text-muted small">@p.Manufacturer</td><td>@(p.WarrantyMonths > 0 ? $"{p.WarrantyMonths} tháng" : "—")</td></tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có sản phẩm.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "Sinh lô tem";
+    var products = (List<Product>)ViewBag.Products;
+}
+<div class="card" style="max-width:640px"><div class="card-body">
+    @if (products.Count == 0)
+    {
+        <div class="alert alert-warning">Chưa có sản phẩm. <a href="/Product/Create">Tạo sản phẩm</a> trước.</div>
+    }
+    else
+    {
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-md-7"><label class="form-label small text-muted">Sản phẩm *</label>
+                    <select name="productId" class="form-select" required>
+                        <option value="">— Chọn —</option>
+                        @foreach (var p in products) { <option value="@p.Id">@p.Code — @p.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-5"><label class="form-label small text-muted">Số lô SX</label><input name="lotNo" class="form-control" placeholder="L2026-00x" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted">Ngày sản xuất</label><input name="mfgDate" type="date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted">Số lượng tem</label><input name="quantity" type="number" value="50" min="1" max="5000" class="form-control" /></div>
+            </div>
+            <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-qr-code me-1"></i>Sinh tem QR</button> <a href="/Batch" class="btn btn-outline-secondary">Hủy</a></div>
+        </form>
+    }
+</div></div>

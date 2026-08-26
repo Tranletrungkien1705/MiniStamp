@@ -1,0 +1,29 @@
+@model StampBatch
+@{
+    ViewData["Title"] = $"Lô {Model.Code}";
+    var shown = Model.Stamps.Take(24).ToList();
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">@Model.Product.Name</h5>
+            <div class="text-muted small">Lô @Model.Code · SX @Model.LotNo · NSX @Model.MfgDate.ToString("dd/MM/yyyy") · <b>@Model.Quantity</b> tem</div>
+        </div>
+        <a href="/Stamp?batchId=@Model.Id" class="btn btn-sm btn-outline-primary align-self-start">Xem tất cả tem</a>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Tem QR (hiện @shown.Count/@Model.Quantity đầu tiên)</h6>
+    <p class="text-muted small">Mỗi QR dẫn tới trang tra cứu công khai. In tem dán lên sản phẩm; người tiêu dùng quét để xác thực.</p>
+    <div class="row g-3">
+        @foreach (var s in shown)
+        {
+            <div class="col-6 col-md-3 col-lg-2 text-center">
+                <img src="/Stamp/Qr?code=@s.QrId&px=4" class="img-fluid border rounded" style="max-width:110px" alt="QR" />
+                <div class="small mt-1" style="font-family:monospace">@s.QrId</div>
+                <div class="text-muted" style="font-size:10px">PIN: @s.Pin</div>
+            </div>
+        }
+    </div>
+</div></div>

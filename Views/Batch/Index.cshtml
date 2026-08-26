@@ -1,0 +1,23 @@
+@model List<StampBatch>
+@{ ViewData["Title"] = "Lô tem"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Các lô tem đã sinh</h6>
+        <a href="/Batch/Create" class="btn btn-sm btn-primary"><i class="bi bi-qr-code me-1"></i>Sinh lô tem</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã lô</th><th>Sản phẩm</th><th>Lô SX</th><th>NSX</th><th class="text-end">SL tem</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var b in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Batch/Detail/@b.Id'">
+                <td class="fw-semibold">@b.Code</td><td>@b.Product.Name</td><td>@b.LotNo</td>
+                <td class="small text-muted">@b.MfgDate.ToString("dd/MM/yyyy")</td>
+                <td class="text-end">@b.Quantity.ToString("N0")</td>
+                <td class="small text-muted">@b.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có lô tem.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
