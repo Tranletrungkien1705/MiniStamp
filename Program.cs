@@ -2,10 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using MiniStamp.Data;
 using MiniStamp.Models;
 using MiniStamp.Services;
+using Serilog;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+FleetObs.ConfigureLogger("ministamp");
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
@@ -18,11 +21,14 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IStampService, StampService>();
+builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+
+app.UseFleetObs();
 
 // Multi-tenant (admin): org = cookie org_key / header X-Api-Key. Trang tra cứu công khai KHÔNG cần.
 app.Use(async (ctx, next) =>
