@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MiniStamp</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="MiniStamp.Tests/**/*.cs" />
+    <Content Remove="MiniStamp.Tests/**/*" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />

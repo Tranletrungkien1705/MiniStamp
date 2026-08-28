@@ -4,13 +4,15 @@ using MiniStamp.Services;
 
 namespace MiniStamp.Controllers;
 
-public class HomeController(IStampService svc) : Controller
+public class HomeController : Controller
 {
-    public async Task<IActionResult> Index()
-    {
-        ViewBag.Dash = await svc.DashboardAsync();
-        return View();
-    }
+    // SPA React (admin) mặc định ở "/". Trang tra cứu công khai /Verify (Razor) + QR giữ nguyên cho người tiêu dùng.
+    public IActionResult Index() => Redirect("/index.html");
+}
+
+public class LegacyController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() { ViewBag.Dash = await svc.DashboardAsync(); return View("~/Views/Home/Index.cshtml"); }
 }
 
 public class ProductController(IStampService svc) : Controller
