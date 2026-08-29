@@ -11,6 +11,9 @@ public record StampDash(int Products, int Batches, int Stamps, int Activated, in
 public record VerifyResult(bool Found, bool Genuine, string Title, string Message,
     Stamp? Stamp, Product? Product, StampBatch? Batch, List<string> Warnings);
 
+/// <summary>Tình trạng bảo hành 1 xe (tra theo VIN) — cho MiniService.</summary>
+public record VehicleWarranty(bool Found, bool Active, string Product, string? QrId, DateTime? WarrantyEnd, int? DaysLeft);
+
 public interface IStampService
 {
     // admin
@@ -26,6 +29,8 @@ public interface IStampService
     // tích hợp: MiniShowroom giao xe → phát 1 tem chính hãng + kích hoạt bảo hành theo VIN
     Task<(string qrId, string pin, string product, DateTime? warrantyEnd)> CreateVehicleStampAsync(
         string vehicleModel, string? vin, string? plate, string? buyerPhone);
+    // tích hợp: MiniService tra bảo hành xe theo VIN (tem có LotNo = VIN)
+    Task<VehicleWarranty?> WarrantyByVinAsync(string vin);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -201,6 +206,22 @@ public class StampService(AppDbContext db) : IStampService
         db.Batches.Add(batch);
         await db.SaveChangesAsync();
         return (stamp.QrId, stamp.Pin, product.Name, stamp.WarrantyEnd);
+    }
+
+    public async Task<VehicleWarranty?> WarrantyByVinAsync(string vin)
+    {
+        vin = (vin ?? "").Trim();
+        if (vin.Length == 0) return null;
+        // tem của xe = tem có LotNo (lô) = VIN; lấy tem mới nhất; xuyên tenant (MiniService khác org)
+        var s = await db.Stamps.IgnoreQueryFilters()
+            .Include(x => x.Product).Include(x => x.Batch)
+            .Where(x => x.Batch.LotNo == vin)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+        if (s == null) return new VehicleWarranty(false, false, "", null, null, null);
+        var active = s.Status != StampStatus.Void && s.WarrantyEnd != null && s.WarrantyEnd >= DateTime.Today;
+        var daysLeft = s.WarrantyEnd != null ? (int?)(s.WarrantyEnd.Value.Date - DateTime.Today).TotalDays : null;
+        return new VehicleWarranty(true, active, s.Product?.Name ?? "", s.QrId, s.WarrantyEnd, daysLeft);
     }
 
     private static string NewQrId()

@@ -61,6 +61,18 @@ app.MapGet("/api/verify", async (string code, IStampService svc, HttpContext ctx
     });
 });
 
+// API tích hợp: MiniService tra tình trạng bảo hành xe theo VIN
+app.MapGet("/api/warranty", async (string vin, IStampService svc) =>
+{
+    var w = await svc.WarrantyByVinAsync(vin);
+    if (w is null || !w.Found) return Results.NotFound(new { vin, found = false });
+    return Results.Ok(new
+    {
+        vin, found = true, active = w.Active, product = w.Product, qrId = w.QrId,
+        warrantyEnd = w.WarrantyEnd?.ToString("yyyy-MM-dd"), daysLeft = w.DaysLeft
+    });
+});
+
 // API tích hợp: MiniShowroom giao xe → phát tem chính hãng + kích hoạt bảo hành theo VIN
 app.MapPost("/api/ext/vehicle-stamp", async (VehicleStampDto dto, IStampService svc, HttpContext ctx) =>
 {
