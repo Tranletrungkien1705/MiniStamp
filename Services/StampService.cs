@@ -23,6 +23,9 @@ public interface IStampService
     Task<List<Stamp>> StampsAsync(string? q, int? batchId);
     Task<List<LotteryReward>> RewardsAsync();
     Task<StampDash> DashboardAsync();
+    // tích hợp: MiniShowroom giao xe → phát 1 tem chính hãng + kích hoạt bảo hành theo VIN
+    Task<(string qrId, string pin, string product, DateTime? warrantyEnd)> CreateVehicleStampAsync(
+        string vehicleModel, string? vin, string? plate, string? buyerPhone);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -161,6 +164,43 @@ public class StampService(AppDbContext db) : IStampService
         if (!picked.IsLose && picked.Stock > 0) picked.Stock--;
         await db.SaveChangesAsync();
         return (true, picked.Name);
+    }
+
+    // ── TÍCH HỢP (MiniShowroom giao xe) ──────────────────────────────
+    public async Task<(string qrId, string pin, string product, DateTime? warrantyEnd)> CreateVehicleStampAsync(
+        string vehicleModel, string? vin, string? plate, string? buyerPhone)
+    {
+        vehicleModel = string.IsNullOrWhiteSpace(vehicleModel) ? "Xe Hyundai" : vehicleModel.Trim();
+        // find-or-create SP theo tên mẫu xe (bảo hành xe mặc định 36 tháng)
+        var product = await db.Products.FirstOrDefaultAsync(p => p.Name == vehicleModel);
+        if (product == null)
+        {
+            product = new Product { Name = vehicleModel, Manufacturer = "Hyundai", WarrantyMonths = 36,
+                Code = $"XE{await db.Products.CountAsync() + 1:D3}", Description = "Xe giao qua MiniShowroom" };
+            db.Products.Add(product);
+            await db.SaveChangesAsync();
+        }
+
+        // 1 lô = 1 con tem cho đúng chiếc xe này; LotNo = VIN (truy vết theo số khung)
+        var batch = new StampBatch
+        {
+            ProductId = product.Id, LotNo = vin ?? plate ?? "", MfgDate = DateTime.Today,
+            Quantity = 1, CreatedBy = "MiniShowroom",
+            Code = $"XE{DateTime.Now:yyMMddHHmm}{await db.Batches.CountAsync() + 1:D2}"
+        };
+        var stamp = new Stamp { ProductId = product.Id, QrId = NewQrId(), Pin = Random.Shared.Next(100000, 999999).ToString() };
+        // giao xe = kích hoạt bảo hành ngay (mốc bắt đầu bảo hành = ngày giao)
+        if (!string.IsNullOrWhiteSpace(buyerPhone))
+        {
+            stamp.Status = StampStatus.Activated;
+            stamp.ActivatedAt = DateTime.Now;
+            stamp.ActivatedPhone = buyerPhone.Trim();
+            stamp.WarrantyEnd = DateTime.Today.AddMonths(product.WarrantyMonths);
+        }
+        batch.Stamps.Add(stamp);
+        db.Batches.Add(batch);
+        await db.SaveChangesAsync();
+        return (stamp.QrId, stamp.Pin, product.Name, stamp.WarrantyEnd);
     }
 
     private static string NewQrId()

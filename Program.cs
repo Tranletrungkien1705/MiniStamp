@@ -61,6 +61,20 @@ app.MapGet("/api/verify", async (string code, IStampService svc, HttpContext ctx
     });
 });
 
+// API tích hợp: MiniShowroom giao xe → phát tem chính hãng + kích hoạt bảo hành theo VIN
+app.MapPost("/api/ext/vehicle-stamp", async (VehicleStampDto dto, IStampService svc, HttpContext ctx) =>
+{
+    var (qrId, pin, product, warrantyEnd) = await svc.CreateVehicleStampAsync(
+        dto.VehicleModel, dto.Vin, dto.Plate, dto.BuyerPhone);
+    var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    return Results.Ok(new
+    {
+        qrId, pin, product,
+        warrantyEnd = warrantyEnd?.ToString("yyyy-MM-dd"),
+        verifyUrl = $"{baseUrl}/Verify?code={qrId}"
+    });
+});
+
 // Đăng ký nhà sản xuất mới (nhận khách)
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
@@ -75,3 +89,4 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record RegisterOrgDto(string Name);
+record VehicleStampDto(string VehicleModel, string? Vin, string? Plate, string? BuyerPhone);
