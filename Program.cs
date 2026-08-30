@@ -22,6 +22,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IStampService, StampService>();
 builder.Services.AddHttpClient();   // đồng bộ danh mục từ MiniPIM
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -30,6 +31,7 @@ using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 
 app.UseFleetObs();
+app.UseCors();
 
 // Multi-tenant (admin): org = cookie org_key / header X-Api-Key. Trang tra cứu công khai KHÔNG cần.
 app.Use(async (ctx, next) =>
