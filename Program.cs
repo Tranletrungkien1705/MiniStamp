@@ -73,6 +73,22 @@ app.MapGet("/api/warranty", async (string vin, IStampService svc) =>
     });
 });
 
+// API tích hợp: MiniWMS nhập kho → phát nguyên lô tem chính hãng cho lô hàng (LotNo = số phiếu)
+app.MapPost("/api/ext/wh-batch", async (WhBatchDto dto, IStampService svc, HttpContext ctx) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Product) || string.IsNullOrWhiteSpace(dto.LotNo))
+        return Results.BadRequest(new { error = "Cần Product và LotNo." });
+    if (dto.Quantity <= 0) return Results.BadRequest(new { error = "Số lượng phải > 0." });
+    var (batchCode, quantity, firstQrId, product) = await svc.CreateWarehouseBatchAsync(
+        dto.Product, dto.LotNo, dto.Quantity, dto.Manufacturer);
+    var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    return Results.Ok(new
+    {
+        batchCode, quantity, product, firstQrId,
+        sampleVerifyUrl = firstQrId is null ? null : $"{baseUrl}/Verify?code={firstQrId}"
+    });
+});
+
 // API tích hợp: MiniShowroom giao xe → phát tem chính hãng + kích hoạt bảo hành theo VIN
 app.MapPost("/api/ext/vehicle-stamp", async (VehicleStampDto dto, IStampService svc, HttpContext ctx) =>
 {
@@ -102,3 +118,4 @@ app.Run();
 
 record RegisterOrgDto(string Name);
 record VehicleStampDto(string VehicleModel, string? Vin, string? Plate, string? BuyerPhone);
+record WhBatchDto(string Product, string LotNo, int Quantity, string? Manufacturer);

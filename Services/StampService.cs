@@ -31,6 +31,9 @@ public interface IStampService
         string vehicleModel, string? vin, string? plate, string? buyerPhone);
     // tích hợp: MiniService tra bảo hành xe theo VIN (tem có LotNo = VIN)
     Task<VehicleWarranty?> WarrantyByVinAsync(string vin);
+    // tích hợp: MiniWMS nhập kho → phát nguyên lô tem chính hãng cho lô hàng (LotNo = số phiếu)
+    Task<(string batchCode, int quantity, string? firstQrId, string product)> CreateWarehouseBatchAsync(
+        string productName, string lotNo, int quantity, string? manufacturer);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -206,6 +209,23 @@ public class StampService(AppDbContext db) : IStampService
         db.Batches.Add(batch);
         await db.SaveChangesAsync();
         return (stamp.QrId, stamp.Pin, product.Name, stamp.WarrantyEnd);
+    }
+
+    public async Task<(string batchCode, int quantity, string? firstQrId, string product)> CreateWarehouseBatchAsync(
+        string productName, string lotNo, int quantity, string? manufacturer)
+    {
+        productName = string.IsNullOrWhiteSpace(productName) ? "Hàng hóa" : productName.Trim();
+        var product = await db.Products.FirstOrDefaultAsync(p => p.Name == productName);
+        if (product == null)
+        {
+            product = new Product { Name = productName, Manufacturer = manufacturer ?? "MiniWMS", WarrantyMonths = 12,
+                Code = $"SP{await db.Products.CountAsync() + 1:D3}", Description = "Nhập kho qua MiniWMS" };
+            db.Products.Add(product); await db.SaveChangesAsync();
+        }
+        var batch = new StampBatch { ProductId = product.Id, LotNo = lotNo, MfgDate = DateTime.Today, CreatedBy = "MiniWMS" };
+        var id = await GenerateBatchAsync(batch, quantity);   // clamp 1..5000, sinh N tem
+        var b = await GetBatchAsync(id);
+        return (b!.Code, b.Quantity, b.Stamps.FirstOrDefault()?.QrId, product.Name);
     }
 
     public async Task<VehicleWarranty?> WarrantyByVinAsync(string vin)
