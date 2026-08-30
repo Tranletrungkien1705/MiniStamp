@@ -1,9 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using MiniStamp.Data;
 using MiniStamp.Models;
 using MiniStamp.Services;
 using Serilog;
 
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;   // giữ claim gốc từ MiniSSO
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 FleetObs.ConfigureLogger("ministamp");
 
@@ -23,6 +28,19 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IStampService, StampService>();
 builder.Services.AddHttpClient();   // đồng bộ danh mục từ MiniPIM
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+// SSO chung: tin token MiniSSO (OIDC RS256).
+var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY") ?? "https://minisso.onrender.com";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
+{
+    o.Authority = ssoAuthority;
+    o.RequireHttpsMetadata = ssoAuthority.StartsWith("https");
+    o.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true, ValidIssuer = ssoAuthority,
+        ValidateAudience = false, ValidateLifetime = true, NameClaimType = "name", RoleClaimType = "role"
+    };
+});
+builder.Services.AddAuthorization();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -32,6 +50,17 @@ using (var scope = app.Services.CreateScope())
 
 app.UseFleetObs();
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// SSO chung: endpoint xác thực bằng token MiniSSO.
+app.MapGet("/api/whoami", (ClaimsPrincipal u) => Results.Ok(new
+{
+    app = "ministamp",
+    sub = u.FindFirst("sub")?.Value, name = u.Identity?.Name ?? u.FindFirst("name")?.Value,
+    email = u.FindFirst("email")?.Value, tenant = u.FindFirst("tenant")?.Value,
+    roles = u.FindAll("role").Select(c => c.Value)
+})).RequireAuthorization();
 
 // Multi-tenant (admin): org = cookie org_key / header X-Api-Key. Trang tra cứu công khai KHÔNG cần.
 app.Use(async (ctx, next) =>
