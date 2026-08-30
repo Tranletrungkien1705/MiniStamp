@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using MiniStamp.Data;
 using MiniStamp.Models;
@@ -34,14 +35,36 @@ public interface IStampService
     // tích hợp: MiniWMS nhập kho → phát nguyên lô tem chính hãng cho lô hàng (LotNo = số phiếu)
     Task<(string batchCode, int quantity, string? firstQrId, string product)> CreateWarehouseBatchAsync(
         string productName, string lotNo, int quantity, string? manufacturer);
+    Task<(int added, int updated, int total)> ImportFromPimAsync();   // đồng bộ danh mục từ MiniPIM
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
     Task<(bool ok, string prize)> SpinAsync(string qrId);
 }
 
-public class StampService(AppDbContext db) : IStampService
+public class StampService(AppDbContext db, IHttpClientFactory httpFactory) : IStampService
 {
+    // Đồng bộ danh mục chuẩn từ MiniPIM (nguồn master data) — upsert theo Code.
+    public async Task<(int added, int updated, int total)> ImportFromPimAsync()
+    {
+        var pimUrl = (Environment.GetEnvironmentVariable("PIM_URL") ?? "https://minipim.onrender.com").TrimEnd('/');
+        var http = httpFactory.CreateClient(); http.Timeout = TimeSpan.FromSeconds(20);
+        var items = await http.GetFromJsonAsync<List<PimProduct>>($"{pimUrl}/api/products") ?? [];
+        int added = 0, updated = 0;
+        foreach (var it in items)
+        {
+            if (string.IsNullOrWhiteSpace(it.code)) continue;
+            var p = await db.Products.FirstOrDefaultAsync(x => x.Code == it.code);
+            if (p == null) { p = new Product { Code = it.code.Trim(), WarrantyMonths = 12 }; db.Products.Add(p); added++; }
+            else updated++;
+            p.Name = it.name ?? p.Name;
+            p.Description = it.group ?? p.Description;
+        }
+        await db.SaveChangesAsync();
+        return (added, updated, added + updated);
+    }
+    private sealed record PimProduct(string code, string? name, string? group, string? uom, string? barcode, decimal costPrice, decimal salePrice);
+
     // ── ADMIN ────────────────────────────────────────────────────────
     public Task<List<Product>> ProductsAsync() => db.Products.OrderBy(p => p.Code).ToListAsync();
     public Task<Product?> GetProductAsync(int id) => db.Products.FirstOrDefaultAsync(p => p.Id == id);
