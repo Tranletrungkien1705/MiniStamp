@@ -136,6 +136,27 @@ app.MapPost("/api/ext/vehicle-stamp", async (VehicleStampDto dto, IStampService 
 });
 
 // Đăng ký nhà sản xuất mới (nhận khách)
+// Import hàng loạt Product thật từ Mst_CarModel (SQL nguồn 2010.HTC) — model xe = sản phẩm được dán tem/QR.
+app.MapPost("/api/import/products", async (List<ImportProductDto> rows, AppDbContext db) =>
+{
+    if (rows is null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu import." });
+    int added = 0, skipped = 0;
+    foreach (var r in rows)
+    {
+        if (string.IsNullOrWhiteSpace(r.ModelCode) || string.IsNullOrWhiteSpace(r.ModelName)) { skipped++; continue; }
+        var code = r.ModelCode.Trim();
+        if (await db.Products.AnyAsync(p => p.Code == code)) { skipped++; continue; }
+        db.Products.Add(new Product
+        {
+            Code = code, Name = r.ModelName.Trim(), Manufacturer = "Hyundai Thành Công",
+            Description = r.SegmentType, WarrantyMonths = 36
+        });
+        added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = rows.Count });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -151,3 +172,4 @@ app.Run();
 record RegisterOrgDto(string Name);
 record VehicleStampDto(string VehicleModel, string? Vin, string? Plate, string? BuyerPhone);
 record WhBatchDto(string Product, string LotNo, int Quantity, string? Manufacturer);
+record ImportProductDto(string? ModelCode, string? ModelName, string? SegmentType, string? FlagActive);
