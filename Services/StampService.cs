@@ -212,10 +212,12 @@ public class StampService(AppDbContext db, IHttpClientFactory httpFactory) : ISt
             await db.SaveChangesAsync();
         }
 
-        // 1 lô = 1 con tem cho đúng chiếc xe này; LotNo = VIN (truy vết theo số khung)
+        // 1 lô = 1 con tem cho đúng chiếc xe này; LotNo PHẢI = VIN (WarrantyByVinAsync tra cứu theo Batch.LotNo == vin) —
+        // KHÔNG fallback sang plate, nếu không sẽ làm /api/warranty?vin=... không bao giờ tìm thấy record (đã xác nhận bug thật).
+        var lotNo = !string.IsNullOrWhiteSpace(vin) ? vin.Trim() : (string.IsNullOrWhiteSpace(plate) ? "" : $"NOVIN-{plate.Trim()}");
         var batch = new StampBatch
         {
-            ProductId = product.Id, LotNo = vin ?? plate ?? "", MfgDate = DateTime.Today,
+            ProductId = product.Id, LotNo = lotNo, MfgDate = DateTime.Today,
             Quantity = 1, CreatedBy = "MiniShowroom",
             Code = $"XE{DateTime.Now:yyMMddHHmm}{await db.Batches.CountAsync() + 1:D2}"
         };
