@@ -1,0 +1,16 @@
+@{
+    ViewData["Title"] = "Nhập serial người dùng";
+}
+<div class="card" style="max-width:760px"><div class="card-body">
+    <p class="text-muted small">Nhập 1 dãy serial người dùng (nghiệp vụ <b>Inv_StampUser</b>). Hệ thống gắn lần lượt các serial vào tem đã sinh nhưng chưa có serial người dùng (theo thứ tự mã tăng dần).</p>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small text-muted">IF_SUINo (mã phiếu nhập)</label>
+                <input name="suiNo" class="form-control" style="font-family:monospace" placeholder="Để trống = tự sinh" /></div>
+            <div class="col-12"><label class="form-label small text-muted">Danh sách serial người dùng * (mỗi dòng 1 mã; có thể thêm ghi chú sau dấu <code>|</code>)</label>
+                <textarea name="serials" class="form-control" rows="8" style="font-family:monospace" placeholder="USER0001&#10;USER0002|Lô in 1&#10;USER0003" required></textarea></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nhập serial</button> <a href="/StampUser" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

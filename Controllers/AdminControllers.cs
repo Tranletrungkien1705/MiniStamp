@@ -1015,3 +1015,38 @@ public class WarrantyController(IStampService svc) : Controller
         return View(w);
     }
 }
+
+// Nhập dãy serial người dùng (nghiệp vụ Inv_StampUser của EQR)
+public class StampUserController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.StampUsersAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? suiNo, string? serials)
+    {
+        // Mỗi dòng: "<IDNo_User>" hoặc "<IDNo_User>|<ghi chú>"
+        var list = new List<(string, string?)>();
+        foreach (var raw in (serials ?? "").Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var token = raw.Trim();
+            if (token.Length == 0) continue;
+            var idx = token.IndexOf('|');
+            if (idx >= 0) list.Add((token[..idx].Trim(), token[(idx + 1)..].Trim()));
+            else list.Add((token, null));
+        }
+        if (string.IsNullOrWhiteSpace(suiNo)) suiNo = $"SUI{DateTime.Now:yyMMddHHmmss}";
+        var r = await svc.ImportStampUsersAsync(suiNo.Trim(), list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var su = await svc.GetStampUserAsync(id);
+        if (su == null) return NotFound();
+        return View(su);
+    }
+}

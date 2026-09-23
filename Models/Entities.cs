@@ -1018,3 +1018,44 @@ public class TraceEventSpec : IOrgOwned
 
     public TraceEvent TraceEvent { get; set; } = null!;
 }
+
+// ── Nhập dãy serial người dùng (Inv_StampUser) — nghiệp vụ EQR ───────
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_StampUser_Add → Inv_StampUser_AddX,
+// file DVP/ImportIDUser.cs): nhập 1 DÃY "serial người dùng" (IDNo_User) rồi
+// GẮN (map) chúng vào các tem đã sinh nhưng CHƯA có serial người dùng
+// (Inv_InventoryGenID.IDNo_User is null). Đây là bước gán mã định danh
+// riêng của khách (DVP) lên tem trước khi in. Ràng buộc EQR:
+//  - IF_SUINo (mã phiếu nhập) bắt buộc + duy nhất (chặn trùng phiếu).
+//  - Phải có ít nhất 1 dòng IDNo_User.
+//  - IDNo_User không được trùng với serial đã nhập trước đó (StampUserIDNo_UserExist).
+//  - Số tem còn trống (chưa gắn IDNo_User) phải >= số serial nhập vào (InvalidValue).
+//  - Map theo thứ tự: serial nhỏ nhất ↔ tem nhỏ nhất; đánh dấu FlagMapIDNo_User='1'.
+public class StampUser : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SuiNo { get; set; } = "";        // IF_SUINo — mã phiếu nhập serial (duy nhất trong tenant)
+    public DateTime ImportDTime { get; set; } = DateTime.Now;  // ImportDTime — mốc nhập
+    public int Quantity { get; set; }               // số serial đã nhập (đã gắn tem)
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<StampUserLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu nhập serial người dùng (1 serial + tem đã gắn) ─
+// IDNo_User = serial người dùng nhập; QrId = tem (IDNo) được gắn serial này
+// (null = chưa gắn được tem vì hết tem trống).
+public class StampUserLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StampUserId { get; set; }
+    public string IdNoUser { get; set; } = "";     // IDNo_User — serial người dùng (duy nhất trong tenant)
+    public string? QrId { get; set; }               // IDNo — tem đã gắn serial (null = chưa gắn)
+    public string? Remark { get; set; }             // IDNo_UserRemark
+    public DateTime AddedAt { get; set; } = DateTime.Now;
+
+    public StampUser StampUser { get; set; } = null!;
+}

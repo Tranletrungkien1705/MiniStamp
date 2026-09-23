@@ -55,6 +55,8 @@ public class AppDbContext : DbContext
     public DbSet<StampLifecyclePeriod> StampLifecyclePeriods => Set<StampLifecyclePeriod>();
     public DbSet<BoxShipment> BoxShipments => Set<BoxShipment>();
     public DbSet<BoxShipmentLine> BoxShipmentLines => Set<BoxShipmentLine>();
+    public DbSet<StampUser> StampUsers => Set<StampUser>();
+    public DbSet<StampUserLine> StampUserLines => Set<StampUserLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -302,6 +304,17 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ xuất 1 lần
             e.HasOne(x => x.BoxShipment).WithMany(x => x.Lines).HasForeignKey(x => x.BoxShipmentId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StampUser>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SuiNo }).IsUnique();   // IF_SUINo duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StampUserLine>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.IdNoUser }).IsUnique();   // 1 serial người dùng chỉ nhập 1 lần
+            e.HasOne(x => x.StampUser).WithMany(x => x.Lines).HasForeignKey(x => x.StampUserId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

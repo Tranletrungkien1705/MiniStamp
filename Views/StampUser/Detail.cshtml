@@ -1,0 +1,32 @@
+@model StampUser
+@{ ViewData["Title"] = $"Phiếu nhập serial {Model.SuiNo}"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Phiếu nhập <span style="font-family:monospace">@Model.SuiNo</span></h5>
+            <div class="text-muted small">Nhập lúc @Model.ImportDTime.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy · @Model.Quantity serial</div>
+        </div>
+        <a href="/StampUser" class="btn btn-sm btn-outline-primary align-self-start">Danh sách phiếu</a>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Serial đã nhập &amp; tem đã gắn</h6>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>#</th><th>IDNo_User (serial người dùng)</th><th>Tem đã gắn (IDNo)</th><th>Ghi chú</th></tr></thead>
+        <tbody>
+        @{ int i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td class="fw-semibold" style="font-family:monospace">@l.IdNoUser</td>
+                <td style="font-family:monospace">@(l.QrId ?? "—")</td>
+                <td class="small text-muted">@(l.Remark ?? "—")</td>
+            </tr>
+        }
+        @if (Model.Lines.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Phiếu không có dòng nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

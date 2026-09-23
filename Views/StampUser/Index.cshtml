@@ -1,0 +1,25 @@
+@model List<StampUser>
+@{ ViewData["Title"] = "Nhập serial người dùng"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h6 class="fw-bold mb-0">Phiếu nhập serial người dùng</h6>
+        <a href="/StampUser/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Nhập serial</a>
+    </div>
+    <p class="text-muted small">Nghiệp vụ <b>Inv_StampUser</b> (EQR): nhập 1 dãy serial người dùng (IDNo_User) rồi gắn vào các tem đã sinh nhưng chưa có serial người dùng. Serial không được trùng; số tem còn trống phải đủ.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>IF_SUINo</th><th>Số serial</th><th>Mốc nhập</th><th>Người nhập</th><th>Ghi chú</th></tr></thead>
+        <tbody>
+        @foreach (var s in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/StampUser/Detail/@s.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@s.SuiNo</td>
+                <td><span class="badge text-bg-primary">@s.Quantity</span></td>
+                <td class="small text-muted">@s.ImportDTime.ToString("dd/MM/yyyy HH:mm")</td>
+                <td>@s.CreatedBy</td>
+                <td class="small text-muted">@(s.Remark ?? "—")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có phiếu nhập serial nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

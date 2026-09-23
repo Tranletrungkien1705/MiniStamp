@@ -88,6 +88,9 @@ public record BoxShipResult(bool Ok, string Message, int Id, string BsNo, int To
 /// <summary>Kết quả hủy phiếu xuất kho theo hộp (nghiệp vụ Inv_VerifiedIDInOut_Cancel).</summary>
 public record BoxShipCancelResult(bool Ok, string Message, int Id, string BsNo, int Released);
 
+/// <summary>Kết quả nhập dãy serial người dùng (nghiệp vụ Inv_StampUser).</summary>
+public record StampUserResult(bool Ok, string Message, int Id, string SuiNo, int Imported, int Mapped);
+
 public interface IStampService
 {
     // admin
@@ -224,6 +227,10 @@ public interface IStampService
     Task<BoxShipResult> CreateBoxShipmentAsync(BoxShipment header, IEnumerable<(string ScanCode, string StampType)> scans, string createdBy);
     Task<BoxShipResult> ShipBoxShipmentAsync(int id, string shippedBy);
     Task<BoxShipCancelResult> CancelBoxShipmentAsync(int id, string? reason, string cancelledBy);
+    // nhập dãy serial người dùng (Inv_StampUser)
+    Task<List<StampUser>> StampUsersAsync();
+    Task<StampUser?> GetStampUserAsync(int id);
+    Task<StampUserResult> ImportStampUsersAsync(string suiNo, IEnumerable<(string IdNoUser, string? Remark)> serials, string createdBy);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -2282,5 +2289,61 @@ public class StampService(AppDbContext db) : IStampService
         sh.CancelReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         await db.SaveChangesAsync();
         return new BoxShipCancelResult(true, $"Đã hủy phiếu {sh.BsNo}, giải phóng {stamps.Count} tem về trạng thái chưa xuất.", sh.Id, sh.BsNo, stamps.Count);
+    }
+
+    // ── NHẬP DÃY SERIAL NGƯỜI DÙNG (Inv_StampUser) ─────────────────
+    public Task<List<StampUser>> StampUsersAsync() =>
+        db.StampUsers.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+
+    public Task<StampUser?> GetStampUserAsync(int id) =>
+        db.StampUsers.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Nhập 1 dãy serial người dùng (IDNo_User) và GẮN vào các tem đã sinh nhưng
+    /// CHƯA có serial người dùng. Mô phỏng nghiệp vụ WAS_Inv_StampUser_Add →
+    /// Inv_StampUser_AddX của EQR (DVP/ImportIDUser.cs):
+    /// - IF_SUINo bắt buộc + duy nhất (chặn trùng phiếu).
+    /// - Phải có ít nhất 1 serial.
+    /// - Serial không được trùng với serial đã nhập trước đó (StampUserIDNo_UserExist).
+    /// - Số tem còn trống (chưa gắn serial người dùng) phải >= số serial nhập (InvalidValue).
+    /// - Map theo thứ tự: serial nhỏ nhất ↔ tem nhỏ nhất; đánh dấu FlagMapIDNo_User='1'.
+    /// </summary>
+    public async Task<StampUserResult> ImportStampUsersAsync(string suiNo, IEnumerable<(string IdNoUser, string? Remark)> serials, string createdBy)
+    {
+        suiNo = (suiNo ?? "").Trim();
+        if (suiNo.Length == 0) return new StampUserResult(false, "IF_SUINo (mã phiếu nhập) không được để trống.", 0, "", 0, 0);
+        if (await db.StampUsers.AnyAsync(x => x.SuiNo == suiNo))
+            return new StampUserResult(false, $"Phiếu nhập {suiNo} đã tồn tại.", 0, suiNo, 0, 0);
+
+        // Chuẩn hoá + loại trùng trong danh sách đầu vào
+        var input = (serials ?? [])
+            .Select(s => (IdNoUser: (s.IdNoUser ?? "").Trim(), Remark: string.IsNullOrWhiteSpace(s.Remark) ? null : s.Remark!.Trim()))
+            .Where(s => s.IdNoUser.Length > 0)
+            .GroupBy(s => s.IdNoUser).Select(g => g.First())
+            .OrderBy(s => s.IdNoUser, StringComparer.Ordinal)
+            .ToList();
+        if (input.Count == 0) return new StampUserResult(false, "Cần ít nhất 1 serial người dùng.", 0, suiNo, 0, 0);
+
+        // Serial không được trùng với serial đã nhập trước đó
+        var codes = input.Select(s => s.IdNoUser).ToList();
+        var existed = await db.StampUserLines.Where(l => codes.Contains(l.IdNoUser)).Select(l => l.IdNoUser).ToListAsync();
+        if (existed.Count > 0)
+            return new StampUserResult(false, $"{existed.Count} serial đã nhập trước đó: {string.Join(", ", existed.Take(10))}", 0, suiNo, 0, 0);
+
+        // Tem còn trống: tem chưa gắn serial người dùng (QrId chưa xuất hiện trong StampUserLine)
+        var mappedQrIds = await db.StampUserLines.Where(l => l.QrId != null).Select(l => l.QrId!).ToListAsync();
+        var available = await db.Stamps.Where(s => !mappedQrIds.Contains(s.QrId))
+            .OrderBy(s => s.QrId).Take(input.Count).ToListAsync();
+        if (available.Count < input.Count)
+            return new StampUserResult(false, $"Số tem còn trống ({available.Count}) ít hơn số serial nhập vào ({input.Count}).", 0, suiNo, 0, 0);
+
+        var su = new StampUser { SuiNo = suiNo, ImportDTime = DateTime.Now, CreatedBy = createdBy };
+        for (int i = 0; i < input.Count; i++)
+            su.Lines.Add(new StampUserLine { IdNoUser = input[i].IdNoUser, QrId = available[i].QrId, Remark = input[i].Remark });
+        su.Quantity = su.Lines.Count;
+        db.StampUsers.Add(su);
+        await db.SaveChangesAsync();
+
+        return new StampUserResult(true, $"Đã nhập {su.Lines.Count} serial người dùng và gắn vào {available.Count} tem.", su.Id, su.SuiNo, su.Lines.Count, available.Count);
     }
 }
