@@ -35,6 +35,9 @@ public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int
 /// <summary>Kết quả hủy phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_Cancel).</summary>
 public record ShipCancelResult(bool Ok, string Message, int Id, string ShipmentNo, int Released);
 
+/// <summary>Kết quả gộp phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_Merge).</summary>
+public record ShipMergeResult(bool Ok, string Message, int KeptId, string KeptNo, int MergedCount, int MovedStamps);
+
 /// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
 public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
 
@@ -143,6 +146,7 @@ public interface IStampService
     Task<ShipResult> CreateShipmentAsync(Shipment header, IEnumerable<string> qrIds, string createdBy);
     Task<ShipResult> ShipShipmentAsync(int id, string shippedBy);
     Task<ShipCancelResult> CancelShipmentAsync(int id, string? reason, string cancelledBy);
+    Task<ShipMergeResult> MergeShipmentsAsync(string refNoSys, string productCode, string userMoveOrder, string mergedBy);
     // kích hoạt thông tin sản xuất (InvF_ProductionActive)
     Task<List<ProductLife>> ProductLivesAsync();
     Task<List<ProductionActive>> ProductionActivesAsync();
@@ -856,6 +860,80 @@ public class StampService(AppDbContext db) : IStampService
         sh.CancelReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         await db.SaveChangesAsync();
         return new ShipCancelResult(true, $"Đã hủy phiếu {sh.ShipmentNo}, giải phóng {stamps.Count} tem về trạng thái chưa xuất.", sh.Id, sh.ShipmentNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Gộp các phiếu xuất kho theo tem TRÙNG KHÓA về 1 phiếu duy nhất. Mô phỏng
+    /// nghiệp vụ WAS_Inv_VerifiedIDInOut_Merge của EQR (Temp.cs → Inv_VerifiedIDInOut_MergeX):
+    /// - Khóa gộp = (RefNoSys, ProductCode, UserMoveOrder) — cả 3 bắt buộc.
+    /// - Phải có ÍT NHẤT 2 phiếu cùng khóa mới gộp được (InvalidQtyRows).
+    /// - Mỗi lượt: chọn phiếu có ÍT tem nhất (QtyVerified nhỏ nhất) làm phiếu bị gộp,
+    ///   chuyển toàn bộ tem của nó sang phiếu còn lại (phiếu đích), rồi xóa phiếu bị gộp.
+    /// - Lặp lại cho tới khi chỉ còn 1 phiếu cho khóa đó.
+    /// </summary>
+    public async Task<ShipMergeResult> MergeShipmentsAsync(string refNoSys, string productCode, string userMoveOrder, string mergedBy)
+    {
+        refNoSys = (refNoSys ?? "").Trim();
+        productCode = (productCode ?? "").Trim();
+        userMoveOrder = (userMoveOrder ?? "").Trim();
+        if (refNoSys.Length == 0) return new ShipMergeResult(false, "Cần nhập RefNoSys (đơn hàng nguồn).", 0, "", 0, 0);
+        if (productCode.Length == 0) return new ShipMergeResult(false, "Cần nhập mã sản phẩm (ProductCode).", 0, "", 0, 0);
+        if (userMoveOrder.Length == 0) return new ShipMergeResult(false, "Cần nhập UserMoveOrder (mã lệnh điều chuyển).", 0, "", 0, 0);
+
+        var product = await db.Products.FirstOrDefaultAsync(p => p.Code == productCode);
+        if (product == null) return new ShipMergeResult(false, $"Không tìm thấy sản phẩm {productCode}.", 0, "", 0, 0);
+
+        // Các phiếu xuất cùng khóa gộp, chỉ gồm phiếu có tem của sản phẩm này
+        var candidates = await db.Shipments.Include(x => x.Lines)
+            .Where(x => x.RefNoSys == refNoSys && x.UserMoveOrder == userMoveOrder
+                        && x.Status != "CANCEL" && x.MergedIntoId == null
+                        && x.Lines.Any(l => l.ProductId == product.Id))
+            .ToListAsync();
+
+        if (candidates.Count <= 1)
+            return new ShipMergeResult(false, $"Cần ít nhất 2 phiếu cùng khóa (RefNoSys={refNoSys}, SP={productCode}, UserMoveOrder={userMoveOrder}) để gộp; hiện có {candidates.Count}.", 0, "", 0, 0);
+
+        var now = DateTime.Now;
+        var mergedCount = 0;
+        var movedStamps = 0;
+
+        // Lặp: gộp phiếu ít tem nhất vào phiếu nhiều tem nhất cho tới khi còn 1 phiếu
+        while (candidates.Count > 1)
+        {
+            var target = candidates.OrderByDescending(x => x.Lines.Count(l => l.ProductId == product.Id)).First();
+            var source = candidates.Where(x => x.Id != target.Id)
+                .OrderBy(x => x.Lines.Count(l => l.ProductId == product.Id)).First();
+
+            // chuyển tem của phiếu nguồn sang phiếu đích
+            var sourceLines = source.Lines.Where(l => l.ProductId == product.Id).ToList();
+            var sourceQrIds = sourceLines.Select(l => l.QrId).ToList();
+            var stamps = await db.Stamps.Where(s => sourceQrIds.Contains(s.QrId)).ToListAsync();
+            foreach (var s in stamps)
+            {
+                s.ShipmentId = target.Id;
+                s.ShippedAt = now;
+                s.CustomerCode = target.CustomerCode;
+            }
+            foreach (var l in sourceLines)
+                target.Lines.Add(new ShipmentLine { QrId = l.QrId, ProductId = l.ProductId, ShippedAt = now });
+
+            // đánh dấu phiếu nguồn đã gộp rồi xóa
+            source.MergedIntoId = target.Id;
+            source.MergedAt = now;
+            source.MergedBy = mergedBy;
+            db.ShipmentLines.RemoveRange(sourceLines);
+            db.Shipments.Remove(source);
+
+            mergedCount++;
+            movedStamps += stamps.Count;
+            candidates.Remove(source);
+        }
+
+        await db.SaveChangesAsync();
+        var kept = candidates[0];
+        return new ShipMergeResult(true,
+            $"Đã gộp {mergedCount} phiếu vào {kept.ShipmentNo} (chuyển {movedStamps} tem).",
+            kept.Id, kept.ShipmentNo, mergedCount, movedStamps);
     }
 
     // ── KÍCH HOẠT THÔNG TIN SẢN XUẤT (InvF_ProductionActive) ────────

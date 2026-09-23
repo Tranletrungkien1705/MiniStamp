@@ -231,6 +231,7 @@ public class Shipment : IOrgOwned
     public string? RefNoSys { get; set; }
     public string? RefNo { get; set; }
     public string? RefType { get; set; }
+    public string? UserMoveOrder { get; set; }        // UserMoveOrder — mã lệnh điều chuyển (khóa gộp phiếu, nghiệp vụ Inv_VerifiedIDInOut_Merge)
 
     // vận chuyển
     public string? PlateNo { get; set; }              // biển số xe
@@ -255,6 +256,11 @@ public class Shipment : IOrgOwned
     public DateTime? CancelledAt { get; set; }        // mốc hủy phiếu
     public string? CancelledBy { get; set; }          // người hủy
     public string? CancelReason { get; set; }         // lý do hủy
+
+    // gộp phiếu xuất (Inv_VerifiedIDInOut_Merge) — nghiệp vụ EQR
+    public int? MergedIntoId { get; set; }            // phiếu đích đã gộp phiếu này vào (null = chưa gộp)
+    public DateTime? MergedAt { get; set; }           // mốc gộp
+    public string? MergedBy { get; set; }             // người gộp
 
     public List<ShipmentLine> Lines { get; set; } = [];
 }

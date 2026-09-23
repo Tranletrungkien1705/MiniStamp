@@ -150,6 +150,7 @@ public class AppDbContext : DbContext
         b.Entity<Shipment>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ShipmentNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.RefNoSys, x.UserMoveOrder });   // tra cứu gộp phiếu (Inv_VerifiedIDInOut_Merge)
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ShipmentLine>(e =>

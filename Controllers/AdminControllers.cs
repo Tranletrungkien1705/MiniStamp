@@ -479,6 +479,18 @@ public class ShipmentController(IStampService svc) : Controller
         TempData[r.Ok ? "Success" : "Error"] = r.Message;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Gộp phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_Merge của EQR)
+    public IActionResult Merge() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Merge(string? refNoSys, string? productCode, string? userMoveOrder)
+    {
+        var r = await svc.MergeShipmentsAsync(refNoSys ?? "", productCode ?? "", userMoveOrder ?? "", "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.KeptId });
+    }
 }
 
 // Xuất kho theo hộp (nghiệp vụ Inv_InventoryVerifiedID_OutByBox của EQR)

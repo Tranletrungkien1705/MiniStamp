@@ -216,6 +216,38 @@ public static class Seeder
             }
             await db.SaveChangesAsync();
 
+            // 2 phiếu xuất kho TRÙNG KHÓA mẫu (Inv_VerifiedIDInOut_Merge) — cùng RefNoSys + UserMoveOrder
+            // + sản phẩm SP001, để demo nghiệp vụ gộp phiếu (phiếu ít tem sẽ bị gộp vào phiếu nhiều tem).
+            var mergeStamps = batch.Stamps.Skip(12).Take(4).ToList();
+            if (mergeStamps.Count >= 2)
+            {
+                var shipA = new Shipment
+                {
+                    ShipmentNo = "PXK-MERGE-A", CustomerCode = "KH001", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                    RefNoSys = "DH-MERGE-001", RefType = "SALES", UserMoveOrder = "LENH-01",
+                    Remark = "Phiếu xuất trùng khóa A (nhiều tem)", CreatedBy = "seed",
+                    Status = "SHIPPED", ShippedAt = DateTime.Now, ShippedBy = "seed"
+                };
+                var shipB = new Shipment
+                {
+                    ShipmentNo = "PXK-MERGE-B", CustomerCode = "KH001", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                    RefNoSys = "DH-MERGE-001", RefType = "SALES", UserMoveOrder = "LENH-01",
+                    Remark = "Phiếu xuất trùng khóa B (ít tem)", CreatedBy = "seed",
+                    Status = "SHIPPED", ShippedAt = DateTime.Now, ShippedBy = "seed"
+                };
+                db.Shipments.AddRange(shipA, shipB);
+                await db.SaveChangesAsync();
+                foreach (var s in mergeStamps.Take(3))
+                {
+                    shipA.Lines.Add(new ShipmentLine { QrId = s.QrId, ProductId = s.ProductId, ShippedAt = DateTime.Now });
+                    s.ShipmentId = shipA.Id; s.ShippedAt = DateTime.Now; s.CustomerCode = shipA.CustomerCode;
+                }
+                var lastMerge = mergeStamps[3];
+                shipB.Lines.Add(new ShipmentLine { QrId = lastMerge.QrId, ProductId = lastMerge.ProductId, ShippedAt = DateTime.Now });
+                lastMerge.ShipmentId = shipB.Id; lastMerge.ShippedAt = DateTime.Now; lastMerge.CustomerCode = shipB.CustomerCode;
+                await db.SaveChangesAsync();
+            }
+
             // 1 phiếu kích hoạt bán hàng mẫu (Inv_InvVerifiedID_ActivateSales) — đã bán 2 tem của lô
             var saTwo = batch.Stamps.Skip(20).Take(2).ToList();
             if (saTwo.Count > 0)
