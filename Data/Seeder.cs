@@ -98,6 +98,26 @@ public static class Seeder
             carton.StampCount = canStamps.Count;
             await db.SaveChangesAsync();
 
+            // Gán tem vào thùng THEO HỘP mẫu (Inv_InventoryVerifiedID_UpdCanFromBox)
+            // — tạo 1 hộp mới (BOX-CANFB-001) chứa 3 tem (tem thứ 9,10,11 của lô) rồi bung hộp
+            //   gán các tem con vào 1 thùng mới (CAN-FB-001) để demo nghiệp vụ UpdCanFromBox.
+            var fbStamps = batch.Stamps.Skip(8).Take(3).ToList();
+            if (fbStamps.Count > 0)
+            {
+                var fbBox = new Box { BoxNo = "BOX-CANFB-001", ProductId = p1.Id, CreatedBy = "seed" };
+                db.Boxes.Add(fbBox);
+                await db.SaveChangesAsync();
+                foreach (var s in fbStamps) { s.BoxId = fbBox.Id; s.BoxedAt = DateTime.Now; }
+                fbBox.Quantity = fbStamps.Count;
+
+                var fbCarton = new Carton { CanNo = "CAN-FB-001", ProductId = p1.Id, CreatedBy = "seed" };
+                db.Cartons.Add(fbCarton);
+                await db.SaveChangesAsync();
+                foreach (var s in fbStamps) { s.CartonId = fbCarton.Id; s.CartonedAt = DateTime.Now; }
+                fbCarton.StampCount = fbStamps.Count;
+                await db.SaveChangesAsync();
+            }
+
             // 1 bản ghi lịch sử đóng hộp mẫu (Map_IDInBoxHist) — lần đóng 5 tem vào hộp mẫu
             var hist = new BoxHistory
             {

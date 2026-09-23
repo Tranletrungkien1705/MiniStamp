@@ -1,0 +1,19 @@
+@{
+    ViewData["Title"] = "Gán tem vào thùng theo hộp";
+}
+<div class="card" style="max-width:720px"><div class="card-body">
+    <p class="text-muted small">Bung các hộp đã chọn ra toàn bộ tem con rồi gán vào 1 thùng (Can) — nghiệp vụ <b>Inv_InventoryVerifiedID_UpdCanFromBox</b> của EQR.
+        Khác với "Gán tem vào thùng" (đầu vào là tem lẻ): ở đây đầu vào là <b>mã hộp</b>, hệ thống tự bung hộp ra tem con.</p>
+    <form asp-action="AssignFromBox" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-5"><label class="form-label small text-muted">Mã thùng *</label>
+                <input name="canNo" class="form-control" placeholder="vd CAN-SEED-001" required />
+            </div>
+            <div class="col-12"><label class="form-label small text-muted">Danh sách mã hộp (mỗi dòng 1 mã, hoặc cách nhau bởi dấu phẩy)</label>
+                <textarea name="boxNos" rows="6" class="form-control" style="font-family:monospace" placeholder="mã hộp..."></textarea>
+            </div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Bung hộp &amp; gán vào thùng</button> <a href="/Carton" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

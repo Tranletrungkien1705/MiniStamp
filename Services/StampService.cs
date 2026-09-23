@@ -20,6 +20,9 @@ public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, 
 /// <summary>Kết quả gán tem trực tiếp vào thùng (nghiệp vụ Inv_InventoryVerifiedID_UpdCan).</summary>
 public record AssignCanResult(bool Ok, string Message, int CartonId, string CanNo, int Assigned);
 
+/// <summary>Kết quả gán tem vào thùng THEO HỘP (nghiệp vụ Inv_InventoryVerifiedID_UpdCanFromBox).</summary>
+public record AssignCanFromBoxResult(bool Ok, string Message, int CartonId, string CanNo, int Boxes, int Assigned);
+
 /// <summary>Kết quả khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo).</summary>
 public record RestoreResult(bool Ok, string Message, int BoxHistoryId, string BoxNo, int Restored, int Flagged);
 
@@ -131,6 +134,8 @@ public interface IStampService
     Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
     // gán tem trực tiếp vào thùng (Inv_InventoryVerifiedID_UpdCan)
     Task<AssignCanResult> AssignStampsToCartonAsync(string canNo, IEnumerable<string> qrIds, string createdBy);
+    // gán tem vào thùng theo hộp (Inv_InventoryVerifiedID_UpdCanFromBox)
+    Task<AssignCanFromBoxResult> AssignStampsToCartonFromBoxAsync(string canNo, IEnumerable<string> boxNos, string createdBy);
     // khôi phục hộp tem từ lịch sử (Map_IDInBox_RestoreBoxNo)
     Task<List<BoxHistory>> BoxHistoriesAsync(string? boxNo);
     Task<BoxHistory?> GetBoxHistoryAsync(int id);
@@ -627,6 +632,54 @@ public class StampService(AppDbContext db) : IStampService
         carton.StampCount = await db.Stamps.CountAsync(s => s.CartonId == carton.Id);
         await db.SaveChangesAsync();
         return new AssignCanResult(true, $"Đã gán {stamps.Count} tem vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Gán tem vào 1 thùng (Can) THEO HỘP: nhận danh sách mã hộp, bung mỗi hộp ra toàn bộ
+    /// tem con rồi gán các tem đó vào thùng. Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventoryVerifiedID_UpdCanFromBox → Inv_InventoryVerifiedID_UpdCanX_New20201001
+    /// (file zTemp.cs) của EQR — khác với "Gán tem vào thùng" (UpdCan): ở đây đầu vào là HỘP,
+    /// hệ thống tự bung hộp ra tem con. Ràng buộc EQR:
+    ///  - Danh sách hộp không được rỗng.
+    ///  - Mọi hộp phải tồn tại (BoxNoNotExistInInvGen).
+    ///  - Hộp phải có tem con (không bung được tem nào).
+    ///  - Thùng phải tồn tại (CanNoNotExistInInvGen).
+    ///  - Tem chưa được gán thùng trước đó (InvalidFlagCan).
+    ///  - Gán xong: tem.CartonId + CartonedAt; cập nhật StampCount của thùng.
+    /// </summary>
+    public async Task<AssignCanFromBoxResult> AssignStampsToCartonFromBoxAsync(string canNo, IEnumerable<string> boxNos, string createdBy)
+    {
+        canNo = (canNo ?? "").Trim().ToUpperInvariant();
+        if (canNo.Length == 0) return new AssignCanFromBoxResult(false, "Cần nhập mã thùng.", 0, "", 0, 0);
+
+        var codes = (boxNos ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new AssignCanFromBoxResult(false, "Chưa nhập mã hộp nào.", 0, "", 0, 0);
+
+        var carton = await db.Cartons.FirstOrDefaultAsync(c => c.CanNo == canNo);
+        if (carton == null) return new AssignCanFromBoxResult(false, $"Thùng {canNo} không tồn tại.", 0, canNo, 0, 0);
+
+        var boxes = await db.Boxes.Where(b => codes.Contains(b.BoxNo)).ToListAsync();
+        var missing = codes.Except(boxes.Select(b => b.BoxNo)).ToList();
+        if (missing.Count > 0)
+            return new AssignCanFromBoxResult(false, $"Không tìm thấy {missing.Count} mã hộp: {string.Join(", ", missing.Take(10))}", carton.Id, canNo, 0, 0);
+
+        // bung hộp ra tem con
+        var boxIds = boxes.Select(b => b.Id).ToList();
+        var stamps = await db.Stamps.Where(s => s.BoxId != null && boxIds.Contains(s.BoxId.Value)).ToListAsync();
+        if (stamps.Count == 0)
+            return new AssignCanFromBoxResult(false, "Các hộp đã chọn không có tem con nào để gán.", carton.Id, canNo, boxes.Count, 0);
+
+        // tem đã được gán thùng khác (InvalidFlagCan)
+        var already = stamps.Where(s => s.CartonId != null && s.CartonId != carton.Id).ToList();
+        if (already.Count > 0)
+            return new AssignCanFromBoxResult(false, $"{already.Count} tem đã được gán thùng khác: {string.Join(", ", already.Take(10).Select(s => s.QrId))}", carton.Id, canNo, boxes.Count, 0);
+
+        var now = DateTime.Now;
+        foreach (var s in stamps) { s.CartonId = carton.Id; s.CartonedAt = now; }
+        carton.StampCount = await db.Stamps.CountAsync(s => s.CartonId == carton.Id);
+        await db.SaveChangesAsync();
+        return new AssignCanFromBoxResult(true, $"Đã bung {boxes.Count} hộp và gán {stamps.Count} tem vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, boxes.Count, stamps.Count);
     }
 
     // ── GHÉP CẶP TEM (Map_StampPair) ────────────────────────────────
