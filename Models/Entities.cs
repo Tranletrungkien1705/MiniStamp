@@ -228,6 +228,62 @@ public class InventoryInFGDtl : IOrgOwned
     public Product Product { get; set; } = null!;
 }
 
+// ── Phiếu xuất kho thành phẩm (InvF_InventoryOutFG) ──────────────────
+// Nghiệp vụ EQR (WAS_InvF_InventoryOutFG_Save / _Approve, file InventoryForm.cs):
+// ghi nhận 1 phiếu xuất kho thành phẩm theo MST (người nộp thuế) — KHÁC với
+// "xuất kho theo tem" (Inv_VerifiedIDInOut): phiếu này xuất theo mặt hàng (PartCode)
+// + số lượng, không gắn từng con tem.
+// Ràng buộc: IF_InvOutFGNo bắt buộc + duy nhất; InvFOutType phải là
+// OUTTHUONGMAI hoặc OUTENDCUS; ít nhất 1 dòng mặt hàng; phiếu ở PENDING mới sửa/duyệt được.
+public class InventoryOutFG : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvOutFGNo { get; set; } = "";   // IF_InvOutFGNo — mã phiếu xuất (duy nhất trong tenant)
+    public string? Mst { get; set; }                 // MST — mã người nộp thuế (đơn vị xuất)
+    public string FormOutType { get; set; } = "KHONGMAVACH"; // MAVACH / KHONGMAVACH
+    public string? InvOutType { get; set; }          // loại xuất kho
+    public string? InvCode { get; set; }             // mã kho
+    public string? PmType { get; set; }
+    public string InvFOutType { get; set; } = "OUTTHUONGMAI"; // OUTTHUONGMAI / OUTENDCUS
+
+    // vận chuyển
+    public string? PlateNo { get; set; }             // biển số xe
+    public string? MoocNo { get; set; }              // số mooc
+    public string? DriverName { get; set; }
+    public string? DriverPhoneNo { get; set; }
+
+    // đối tượng nhận
+    public string? AgentCode { get; set; }           // mã đại lý
+    public string? CustomerName { get; set; }
+
+    public string Status { get; set; } = "PENDING";  // PENDING / APPROVE / CANCEL
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+
+    public List<InventoryOutFGDtl> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu xuất kho thành phẩm (1 mặt hàng + số lượng) ───
+// vd: PartCode = SP001, Qty = 500. SerialNo (InstSerial) lưu kèm danh sách
+// serial xuất (nếu có) dưới dạng text phân tách dòng.
+public class InventoryOutFGDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InventoryOutFGId { get; set; }
+    public string PartCode { get; set; } = "";        // mã mặt hàng (Product.Code)
+    public int ProductId { get; set; }
+    public int Qty { get; set; }                     // số lượng xuất
+    public string? SerialNo { get; set; }            // danh sách serial (mỗi dòng 1 serial)
+
+    public InventoryOutFG InventoryOutFG { get; set; } = null!;
+    public Product Product { get; set; } = null!;
+}
+
 // ── Hạn sử dụng (Mst_ProductLife) — danh mục master data ─────────────
 // Nghiệp vụ EQR: mỗi sản phẩm có 1 "hạn sử dụng" (ProductLifeCode).
 // ProductLifeValue = số đơn vị (ngày/tuần/tháng), ProductLifeValueByDay = quy đổi ra ngày.

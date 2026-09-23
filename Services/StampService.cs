@@ -23,6 +23,9 @@ public record BrokenResult(bool Ok, string Message, int BrokenStampId, string Bs
 /// <summary>Kết quả tạo/duyệt phiếu nhập kho thành phẩm (nghiệp vụ InvF_InventoryInFG).</summary>
 public record InvInResult(bool Ok, string Message, int Id, string InvInNo, int TotalQty);
 
+/// <summary>Kết quả tạo/duyệt phiếu xuất kho thành phẩm (nghiệp vụ InvF_InventoryOutFG).</summary>
+public record InvOutResult(bool Ok, string Message, int Id, string InvOutFGNo, int TotalQty);
+
 /// <summary>Kết quả tạo/xuất phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut).</summary>
 public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int TotalQty);
 
@@ -64,6 +67,12 @@ public interface IStampService
     Task<InventoryInFG?> GetInventoryInFGAsync(int id);
     Task<InvInResult> CreateInventoryInFGAsync(string invInNo, string? remark, IEnumerable<(int ProductId, int Qty, DateTime ProductionDate)> lines, string createdBy);
     Task<InvInResult> ApproveInventoryInFGAsync(int id, string approvedBy);
+    // phiếu xuất kho thành phẩm (InvF_InventoryOutFG)
+    Task<List<InventoryOutFG>> InventoryOutFGsAsync();
+    Task<InventoryOutFG?> GetInventoryOutFGAsync(int id);
+    Task<InvOutResult> CreateInventoryOutFGAsync(InventoryOutFG header, IEnumerable<(int ProductId, int Qty, string? SerialNo)> lines, string createdBy);
+    Task<InvOutResult> ApproveInventoryOutFGAsync(int id, string approvedBy);
+    Task<InvOutResult> DeleteInventoryOutFGAsync(int id);
     // phiếu xuất kho theo tem (Inv_VerifiedIDInOut / OutGenInAndOut)
     Task<List<Shipment>> ShipmentsAsync();
     Task<Shipment?> GetShipmentAsync(int id);
@@ -377,6 +386,93 @@ public class StampService(AppDbContext db) : IStampService
         fg.ApprovedBy = approvedBy;
         await db.SaveChangesAsync();
         return new InvInResult(true, $"Đã duyệt phiếu nhập {fg.InvInNo}.", fg.Id, fg.InvInNo, fg.Lines.Sum(l => l.Qty));
+    }
+
+    // ── PHIẾU XUẤT KHO THÀNH PHẨM (InvF_InventoryOutFG) ─────────────
+    public Task<List<InventoryOutFG>> InventoryOutFGsAsync() =>
+        db.InventoryOutFGs.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<InventoryOutFG?> GetInventoryOutFGAsync(int id) =>
+        db.InventoryOutFGs.Include(x => x.Lines).ThenInclude(l => l.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo/cập nhật phiếu xuất kho thành phẩm. Mô phỏng nghiệp vụ
+    /// InvF_InventoryOutFG_Save của EQR (InventoryForm.cs):
+    /// - IF_InvOutFGNo bắt buộc và duy nhất.
+    /// - InvFOutType chỉ nhận OUTTHUONGMAI hoặc OUTENDCUS.
+    /// - Phải có ít nhất 1 dòng mặt hàng (PartCode) với số lượng > 0.
+    /// - Mọi mặt hàng phải tồn tại trong hệ thống.
+    /// - Phiếu mới ở trạng thái PENDING (chờ duyệt).
+    /// </summary>
+    public async Task<InvOutResult> CreateInventoryOutFGAsync(InventoryOutFG header,
+        IEnumerable<(int ProductId, int Qty, string? SerialNo)> lines, string createdBy)
+    {
+        var rows = (lines ?? []).Where(l => l.ProductId > 0 && l.Qty > 0).ToList();
+        if (rows.Count == 0) return new InvOutResult(false, "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0.", 0, "", 0);
+
+        var type = (header.InvFOutType ?? "").Trim().ToUpperInvariant();
+        if (type != "OUTTHUONGMAI" && type != "OUTENDCUS")
+            return new InvOutResult(false, "Loại xuất (InvFOutType) chỉ nhận OUTTHUONGMAI hoặc OUTENDCUS.", 0, "", 0);
+
+        var productIds = rows.Select(r => r.ProductId).Distinct().ToList();
+        var products = await db.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+        var bad = productIds.Except(products.Select(p => p.Id)).ToList();
+        if (bad.Count > 0) return new InvOutResult(false, $"Mặt hàng không tồn tại: {string.Join(", ", bad)}", 0, "", 0);
+        var codeById = products.ToDictionary(p => p.Id, p => p.Code);
+
+        if (string.IsNullOrWhiteSpace(header.InvOutFGNo)) header.InvOutFGNo = $"PXKTP{DateTime.Now:yyMMddHHmmss}";
+        header.InvOutFGNo = header.InvOutFGNo.Trim();
+        if (await db.InventoryOutFGs.AnyAsync(x => x.InvOutFGNo == header.InvOutFGNo))
+            return new InvOutResult(false, $"Mã phiếu {header.InvOutFGNo} đã tồn tại.", 0, "", 0);
+
+        header.InvFOutType = type;
+        header.Status = "PENDING";
+        header.CreatedBy = createdBy;
+        foreach (var r in rows)
+            header.Lines.Add(new InventoryOutFGDtl
+            {
+                ProductId = r.ProductId,
+                PartCode = codeById[r.ProductId],
+                Qty = r.Qty,
+                SerialNo = string.IsNullOrWhiteSpace(r.SerialNo) ? null : r.SerialNo.Trim()
+            });
+        db.InventoryOutFGs.Add(header);
+        await db.SaveChangesAsync();
+        return new InvOutResult(true, $"Đã tạo phiếu xuất kho TP {header.InvOutFGNo} ({rows.Count} dòng, {rows.Sum(r => r.Qty)} SP).", header.Id, header.InvOutFGNo, rows.Sum(r => r.Qty));
+    }
+
+    /// <summary>
+    /// Duyệt phiếu xuất kho thành phẩm. Mô phỏng nghiệp vụ
+    /// InvF_InventoryOutFG_Approve của EQR:
+    /// - Chỉ phiếu PENDING mới được duyệt.
+    /// - Duyệt xong: Status = APPROVE + ghi mốc thời gian/người duyệt.
+    /// </summary>
+    public async Task<InvOutResult> ApproveInventoryOutFGAsync(int id, string approvedBy)
+    {
+        var fg = await db.InventoryOutFGs.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (fg == null) return new InvOutResult(false, "Không tìm thấy phiếu xuất kho.", 0, "", 0);
+        if (fg.Status != "PENDING") return new InvOutResult(false, $"Phiếu {fg.InvOutFGNo} đang ở trạng thái {fg.Status}, không thể duyệt.", fg.Id, fg.InvOutFGNo, 0);
+
+        fg.Status = "APPROVE";
+        fg.ApprovedAt = DateTime.Now;
+        fg.ApprovedBy = approvedBy;
+        await db.SaveChangesAsync();
+        return new InvOutResult(true, $"Đã duyệt phiếu xuất kho TP {fg.InvOutFGNo}.", fg.Id, fg.InvOutFGNo, fg.Lines.Sum(l => l.Qty));
+    }
+
+    /// <summary>
+    /// Xóa phiếu xuất kho thành phẩm. Mô phỏng ràng buộc EQR: chỉ xóa được phiếu PENDING.
+    /// </summary>
+    public async Task<InvOutResult> DeleteInventoryOutFGAsync(int id)
+    {
+        var fg = await db.InventoryOutFGs.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (fg == null) return new InvOutResult(false, "Không tìm thấy phiếu xuất kho.", 0, "", 0);
+        if (fg.Status != "PENDING") return new InvOutResult(false, $"Phiếu {fg.InvOutFGNo} đang ở trạng thái {fg.Status}, không thể xóa.", fg.Id, fg.InvOutFGNo, 0);
+
+        db.InventoryOutFGs.Remove(fg);
+        await db.SaveChangesAsync();
+        return new InvOutResult(true, $"Đã xóa phiếu xuất kho TP {fg.InvOutFGNo}.", 0, fg.InvOutFGNo, 0);
     }
 
     // ── PHIẾU XUẤT KHO THEO TEM (Inv_VerifiedIDInOut / OutGenInAndOut) ─

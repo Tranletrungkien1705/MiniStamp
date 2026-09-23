@@ -211,6 +211,71 @@ public class InventoryInController(IStampService svc) : Controller
     }
 }
 
+// Phiếu xuất kho thành phẩm (nghiệp vụ InvF_InventoryOutFG của EQR)
+public class InventoryOutController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.InventoryOutFGsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? invOutFGNo, string? mst, string? invFOutType, string? invOutType,
+        string? invCode, string? pmType, string? formOutType, string? plateNo, string? moocNo, string? driverName,
+        string? driverPhoneNo, string? agentCode, string? customerName, string? remark,
+        int[]? productId, int[]? qty, string[]? serialNo)
+    {
+        var products = await svc.ProductsAsync();
+        var lines = new List<(int, int, string?)>();
+        if (productId != null)
+            for (int i = 0; i < productId.Length; i++)
+            {
+                var q = (qty != null && i < qty.Length) ? qty[i] : 0;
+                var sn = (serialNo != null && i < serialNo.Length) ? serialNo[i] : null;
+                if (productId[i] > 0 && q > 0) lines.Add((productId[i], q, sn));
+            }
+        if (lines.Count == 0) { TempData["Error"] = "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0."; ViewBag.Products = products; return View(); }
+
+        var header = new InventoryOutFG
+        {
+            InvOutFGNo = invOutFGNo ?? "", Mst = mst, InvFOutType = invFOutType ?? "OUTTHUONGMAI",
+            InvOutType = invOutType, InvCode = invCode, PmType = pmType, FormOutType = formOutType ?? "KHONGMAVACH",
+            PlateNo = plateNo, MoocNo = moocNo, DriverName = driverName, DriverPhoneNo = driverPhoneNo,
+            AgentCode = agentCode, CustomerName = customerName, Remark = remark
+        };
+        var r = await svc.CreateInventoryOutFGAsync(header, lines, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = products; return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var fg = await svc.GetInventoryOutFGAsync(id);
+        if (fg == null) return NotFound();
+        return View(fg);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id)
+    {
+        var r = await svc.ApproveInventoryOutFGAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var r = await svc.DeleteInventoryOutFGAsync(id);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut / OutGenInAndOut của EQR)
 public class ShipmentController(IStampService svc) : Controller
 {

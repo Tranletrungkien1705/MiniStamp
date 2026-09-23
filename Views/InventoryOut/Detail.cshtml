@@ -1,0 +1,69 @@
+@model InventoryOutFG
+@{
+    ViewData["Title"] = $"Phiếu xuất kho TP {Model.InvOutFGNo}";
+    var total = Model.Lines.Sum(l => l.Qty);
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Phiếu xuất kho thành phẩm <span style="font-family:monospace">@Model.InvOutFGNo</span></h5>
+            <div class="text-muted small">
+                @Model.Lines.Count dòng · tổng <b>@total.ToString("N0")</b> sản phẩm · tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+            </div>
+            <div class="text-muted small">
+                Loại xuất: <b>@(Model.InvFOutType == "OUTENDCUS" ? "Xuất cho người tiêu dùng" : "Xuất thương mại")</b>
+                · Loại phiếu: @Model.FormOutType
+                @if (!string.IsNullOrWhiteSpace(Model.Mst)) { <text> · MST: @Model.Mst</text> }
+                @if (!string.IsNullOrWhiteSpace(Model.InvCode)) { <text> · Kho: @Model.InvCode</text> }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerName) || !string.IsNullOrWhiteSpace(Model.AgentCode))
+            {
+                <div class="text-muted small">Nhận: @Model.CustomerName @(string.IsNullOrWhiteSpace(Model.AgentCode) ? "" : $"({Model.AgentCode})")</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.PlateNo) || !string.IsNullOrWhiteSpace(Model.DriverName))
+            {
+                <div class="text-muted small">Vận chuyển: @Model.PlateNo @Model.MoocNo · @Model.DriverName @Model.DriverPhoneNo</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+            @if (Model.ApprovedAt != null) { <div class="text-muted small">Duyệt lúc @Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ApprovedBy</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            @if (Model.Status == "APPROVE") { <span class="badge bg-success">APPROVE</span> }
+            else if (Model.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+            else { <span class="badge bg-warning text-dark">PENDING</span> }
+            @if (Model.Status == "PENDING")
+            {
+                <form asp-action="Approve" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2-circle me-1"></i>Duyệt phiếu</button>
+                </form>
+                <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Xóa phiếu xuất kho này?');">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa phiếu</button>
+                </form>
+            }
+            <a href="/InventoryOut" class="btn btn-sm btn-outline-primary">Danh sách phiếu</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Chi tiết xuất kho</h6>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Mặt hàng</th><th class="text-end">Số lượng</th><th>Serial</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td>@l.PartCode — @l.Product.Name</td>
+                <td class="text-end">@l.Qty.ToString("N0")</td>
+                <td class="small text-muted" style="white-space:pre-line">@l.SerialNo</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot><tr><th colspan="2" class="text-end">Tổng</th><th class="text-end">@total.ToString("N0")</th><th></th></tr></tfoot>
+    </table>
+</div></div>

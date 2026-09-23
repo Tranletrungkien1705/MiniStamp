@@ -98,6 +98,21 @@ public static class Seeder
             db.InventoryInFGs.Add(fg);
             await db.SaveChangesAsync();
 
+            // 1 phiếu xuất kho thành phẩm mẫu (InvF_InventoryOutFG) — đã duyệt
+            var outfg = new InventoryOutFG
+            {
+                InvOutFGNo = "PXKTP-SEED-001", Mst = "2600123456", FormOutType = "KHONGMAVACH",
+                InvOutType = "THUONGMAI", InvCode = "KHO01", InvFOutType = "OUTTHUONGMAI",
+                PlateNo = "29C-678.90", DriverName = "Trần Văn B", DriverPhoneNo = "0987654321",
+                AgentCode = "DL002", CustomerName = "Đại lý Phân bón Trung Kiên",
+                Remark = "Xuất bán thành phẩm lô mẫu", CreatedBy = "seed",
+                Status = "APPROVE", ApprovedAt = DateTime.Now, ApprovedBy = "seed"
+            };
+            outfg.Lines.Add(new InventoryOutFGDtl { ProductId = p1.Id, PartCode = p1.Code, Qty = 300, SerialNo = "NPK-0001\nNPK-0002" });
+            outfg.Lines.Add(new InventoryOutFGDtl { ProductId = p2.Id, PartCode = p2.Code, Qty = 120 });
+            db.InventoryOutFGs.Add(outfg);
+            await db.SaveChangesAsync();
+
             // 1 phiếu xuất kho theo tem mẫu (Inv_VerifiedIDInOut) — đã xuất 3 tem của lô
             var ship = new Shipment
             {
@@ -204,7 +219,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

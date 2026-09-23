@@ -22,6 +22,8 @@ public class AppDbContext : DbContext
     public DbSet<BrokenStampLine> BrokenStampLines => Set<BrokenStampLine>();
     public DbSet<InventoryInFG> InventoryInFGs => Set<InventoryInFG>();
     public DbSet<InventoryInFGDtl> InventoryInFGDtls => Set<InventoryInFGDtl>();
+    public DbSet<InventoryOutFG> InventoryOutFGs => Set<InventoryOutFG>();
+    public DbSet<InventoryOutFGDtl> InventoryOutFGDtls => Set<InventoryOutFGDtl>();
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
     public DbSet<ProductLife> ProductLives => Set<ProductLife>();
@@ -91,6 +93,17 @@ public class AppDbContext : DbContext
         b.Entity<InventoryInFGDtl>(e =>
         {
             e.HasOne(x => x.InventoryInFG).WithMany(x => x.Lines).HasForeignKey(x => x.InventoryInFGId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InventoryOutFG>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvOutFGNo }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InventoryOutFGDtl>(e =>
+        {
+            e.HasOne(x => x.InventoryOutFG).WithMany(x => x.Lines).HasForeignKey(x => x.InventoryOutFGId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
