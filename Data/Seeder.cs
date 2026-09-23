@@ -213,6 +213,23 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
 
+            // 1 phiên sản xuất mẫu (InvF_ProductionSession) — gom 6 tem đầu của lô vào 1 phiên ca CA1
+            var psSix = batch.Stamps.Skip(10).Take(6).ToList();
+            if (psSix.Count > 0)
+            {
+                var ps = new ProductionSession
+                {
+                    PsNo = "PS-SEED-001", OrgCode = "ORG01", ShiftCode = "CA1", LotCode = batch.LotNo,
+                    ProductId = p1.Id, QtyInput = 6, Remark = "Phiên sản xuất mẫu", CreatedBy = "seed"
+                };
+                int psIdx = 0;
+                foreach (var s in psSix)
+                    ps.Lines.Add(new ProductionSessionLine { QrId = s.QrId, Idx = ++psIdx });
+                ps.QtyVerified = ps.Lines.Count;
+                db.ProductionSessions.Add(ps);
+                await db.SaveChangesAsync();
+            }
+
             // Danh mục nguồn gốc mẫu (Mst_NguonGoc) — dùng cho trường Origin ở màn Kích hoạt SX
             db.OriginCatalogs.AddRange(
                 new OriginCatalog
@@ -361,7 +378,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

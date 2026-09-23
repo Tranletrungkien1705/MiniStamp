@@ -1,0 +1,50 @@
+@model ProductionSession
+@{ ViewData["Title"] = $"Phiên sản xuất {Model.PsNo}"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Phiên sản xuất <span style="font-family:monospace">@Model.PsNo</span></h5>
+            <div class="text-muted small">
+                Tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy
+            </div>
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <span class="badge bg-success">@Model.QtyVerified tem</span>
+            <a href="/ProductionSession" class="btn btn-sm btn-outline-primary">Danh sách</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card mb-3"><div class="card-body">
+    <h6 class="fw-bold mb-3">Thông tin phiên</h6>
+    <div class="row g-3">
+        <div class="col-md-4"><div class="text-muted small">Sản phẩm</div><div class="fw-semibold">@(Model.Product == null ? "—" : $"{Model.Product.Code} — {Model.Product.Name}")</div></div>
+        <div class="col-md-4"><div class="text-muted small">Ca sản xuất</div><div class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.ShiftCode) ? "—" : Model.ShiftCode)</div></div>
+        <div class="col-md-4"><div class="text-muted small">Mã lô</div><div class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.LotCode) ? "—" : Model.LotCode)</div></div>
+        <div class="col-md-4"><div class="text-muted small">Đơn vị sản xuất</div><div class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.OrgCode) ? "—" : Model.OrgCode)</div></div>
+        <div class="col-md-4"><div class="text-muted small">Số lượng kế hoạch</div><div class="fw-semibold">@Model.QtyInput.ToString("N0")</div></div>
+        <div class="col-md-4"><div class="text-muted small">Số tem ghi nhận</div><div class="fw-semibold text-success">@Model.QtyVerified.ToString("N0")</div></div>
+        @if (!string.IsNullOrWhiteSpace(Model.Remark))
+        {
+            <div class="col-12"><div class="text-muted small">Ghi chú</div><div class="fw-semibold">@Model.Remark</div></div>
+        }
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Danh sách tem trong phiên (@Model.Lines.Count)</h6>
+    <table class="table table-sm table-hover align-middle">
+        <thead><tr><th style="width:80px">Thứ tự</th><th>Mã tem (IDNo)</th><th>Thời điểm</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model.Lines.OrderBy(x => x.Idx))
+        {
+            <tr>
+                <td class="text-muted">@l.Idx</td>
+                <td style="font-family:monospace">@l.QrId</td>
+                <td class="small text-muted">@l.AddedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Lines.Count == 0) { <tr><td colspan="3" class="text-center text-muted py-4">Phiên chưa có tem nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

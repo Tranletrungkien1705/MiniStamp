@@ -1,0 +1,27 @@
+@model List<ProductionSession>
+@{ ViewData["Title"] = "Phiên sản xuất"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Phiên sản xuất</h6>
+        <a href="/ProductionSession/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle me-1"></i>Ghi nhận phiên mới</a>
+    </div>
+    <p class="text-muted small">Ghi nhận 1 phiên sản xuất (ca sản xuất) — gom 1 dãy tem đã quét vào 1 phiên theo ca/lô/sản phẩm. Đây là bước (2) vòng đời tem: sản xuất / ghép sản phẩm.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã phiên</th><th>Ca</th><th>Lô</th><th>Sản phẩm</th><th>SL kế hoạch</th><th>SL ghi nhận</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var p in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/ProductionSession/Detail/@p.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@p.PsNo</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(p.ShiftCode) ? "—" : p.ShiftCode)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(p.LotCode) ? "—" : p.LotCode)</td>
+                <td>@(p.Product == null ? "—" : $"{p.Product.Code} — {p.Product.Name}")</td>
+                <td class="small text-muted">@p.QtyInput.ToString("N0")</td>
+                <td class="fw-semibold">@p.QtyVerified.ToString("N0")</td>
+                <td class="small text-muted">@p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có phiên sản xuất nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

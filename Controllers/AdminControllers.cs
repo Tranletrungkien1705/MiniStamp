@@ -482,7 +482,37 @@ public class ProductionActiveController(IStampService svc) : Controller
     }
 }
 
-// Danh mục Nguồn gốc (nghiệp vụ Mst_NguonGoc của EQR)
+// Phiên sản xuất (nghiệp vụ InvF_ProductionSession của EQR)
+public class ProductionSessionController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProductionSessionsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? psNo, string? orgCode, string? shiftCode, string? lotCode,
+        int productId, int qtyInput, string? codes, string? remark)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (string.IsNullOrWhiteSpace(psNo)) psNo = $"PS{DateTime.Now:yyMMddHHmmss}";
+        var r = await svc.CreateProductionSessionAsync(psNo.Trim(), orgCode, shiftCode, lotCode,
+            productId, qtyInput, list, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var ps = await svc.GetProductionSessionAsync(id);
+        if (ps == null) return NotFound();
+        return View(ps);
+    }
+}
 public class OriginController(IStampService svc) : Controller
 {
     public async Task<IActionResult> Index(string? q)

@@ -1,0 +1,32 @@
+@{
+    ViewData["Title"] = "Ghi nhận phiên sản xuất";
+    var products = (List<Product>)ViewBag.Products;
+}
+<div class="card" style="max-width:860px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã phiên (IF_PSNo) <span class="text-danger">*</span></label><input name="psNo" class="form-control" placeholder="Để trống sẽ tự sinh" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Ca sản xuất (ShiftCode)</label><input name="shiftCode" class="form-control" placeholder="VD: CA1" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Mã lô (LotCode)</label><input name="lotCode" class="form-control" placeholder="VD: L2026-001" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Đơn vị sản xuất (OrgID)</label><input name="orgCode" class="form-control" placeholder="VD: ORG01" /></div>
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Sản phẩm</label>
+                <select name="productId" class="form-select">
+                    <option value="0">— Chưa gắn —</option>
+                    @foreach (var p in products) { <option value="@p.Id">@p.Code — @p.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-4"><label class="form-label small text-muted">Số lượng kế hoạch (QtyInput)</label><input name="qtyInput" type="number" min="0" value="0" class="form-control" /></div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small text-muted">Danh sách tem (IDNo) <span class="text-danger">*</span></label>
+            <textarea name="codes" rows="6" class="form-control" style="font-family:monospace" placeholder="Mỗi dòng 1 mã tem, hoặc cách nhau bởi dấu phẩy / khoảng trắng"></textarea>
+            <div class="form-text">Mọi tem phải tồn tại trong kho sinh số. Tem đã thuộc phiên khác sẽ được gỡ khỏi phiên cũ (rút ruột) và chuyển sang phiên này.</div>
+        </div>
+        <div class="mb-2"><label class="form-label small text-muted">Ghi chú</label><input name="remark" class="form-control" /></div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Ghi nhận phiên</button> <a href="/ProductionSession" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

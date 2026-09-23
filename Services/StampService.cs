@@ -900,6 +900,69 @@ public class StampService(AppDbContext db) : IStampService
         return new PaResult(true, $"Đã xóa phiếu kích hoạt {pa.PaNo}.", 0, pa.PaNo, pa.ExpiryDate);
     }
 
+    // ── PHIÊN SẢN XUẤT (InvF_ProductionSession) ─────────────────────
+    public Task<List<ProductionSession>> ProductionSessionsAsync() =>
+        db.ProductionSessions.Include(x => x.Product).Include(x => x.Lines)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<ProductionSession?> GetProductionSessionAsync(int id) =>
+        db.ProductionSessions.Include(x => x.Product).Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Ghi nhận 1 phiên sản xuất (ca sản xuất) — bước (2) vòng đời tem.
+    /// Mô phỏng nghiệp vụ InvF_ProductionSession_Add của EQR (zTemp.cs):
+    /// - IF_PSNo (mã phiên) bắt buộc và không được trùng phiên khác.
+    /// - Sản phẩm (nếu có) phải tồn tại.
+    /// - Phải có ít nhất 1 dòng tem (IDNo).
+    /// - Mọi IDNo phải tồn tại trong kho sinh số (Inv_InventoryGenID).
+    /// - QtyVerified = số tem thực tế đã ghi nhận vào phiên.
+    /// - "Rút ruột": tem đã thuộc phiên khác thì gỡ khỏi phiên cũ, chuyển sang phiên này.
+    /// </summary>
+    public async Task<PsResult> CreateProductionSessionAsync(string psNo, string? orgCode, string? shiftCode, string? lotCode,
+        int productId, int qtyInput, IEnumerable<string> qrIds, string? remark, string createdBy)
+    {
+        psNo = (psNo ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(psNo))
+            return new PsResult(false, "Mã phiên sản xuất (IF_PSNo) không được để trống.", 0, "", 0);
+
+        if (await db.ProductionSessions.AnyAsync(x => x.PsNo == psNo))
+            return new PsResult(false, $"Mã phiên {psNo} đã tồn tại.", 0, psNo, 0);
+
+        if (productId > 0 && !await db.Products.AnyAsync(p => p.Id == productId))
+            return new PsResult(false, "Sản phẩm không tồn tại.", 0, psNo, 0);
+
+        // Chuẩn hoá danh sách tem: bỏ rỗng, giữ thứ tự quét, chống trùng trong cùng phiên.
+        var list = (qrIds ?? []).Select(x => (x ?? "").Trim())
+            .Where(x => x.Length > 0).Distinct().ToList();
+        if (list.Count == 0)
+            return new PsResult(false, "Phải có ít nhất 1 tem (IDNo) trong phiên sản xuất.", 0, psNo, 0);
+
+        // Mọi IDNo phải tồn tại trong kho sinh số (Inv_InventoryGenID).
+        var existing = await db.Stamps.Where(s => list.Contains(s.QrId)).Select(s => s.QrId).ToListAsync();
+        var missing = list.Except(existing).ToList();
+        if (missing.Count > 0)
+            return new PsResult(false, $"Tem không tồn tại trong kho sinh số: {string.Join(", ", missing)}.", 0, psNo, 0);
+
+        var ps = new ProductionSession
+        {
+            PsNo = psNo, OrgCode = orgCode, ShiftCode = shiftCode, LotCode = lotCode,
+            ProductId = productId, QtyInput = qtyInput, Remark = remark, CreatedBy = createdBy
+        };
+        int idx = 0;
+        foreach (var qr in list)
+            ps.Lines.Add(new ProductionSessionLine { QrId = qr, Idx = ++idx });
+        ps.QtyVerified = ps.Lines.Count;
+
+        // "Rút ruột": gỡ các tem này khỏi phiên cũ (nếu đã thuộc phiên khác) rồi mới gắn vào phiên mới.
+        var oldLines = await db.ProductionSessionLines.Where(l => list.Contains(l.QrId)).ToListAsync();
+        if (oldLines.Count > 0) db.ProductionSessionLines.RemoveRange(oldLines);
+
+        db.ProductionSessions.Add(ps);
+        await db.SaveChangesAsync();
+        return new PsResult(true, $"Đã ghi nhận phiên sản xuất {ps.PsNo} với {ps.QtyVerified} tem.", ps.Id, ps.PsNo, ps.QtyVerified);
+    }
+
     // ── DANH MỤC NGUỒN GỐC (Mst_NguonGoc) ───────────────────────────
     /// <summary>
     /// Danh sách nguồn gốc. Nếu có từ khóa q → lọc theo Code/Name/DisplayName
