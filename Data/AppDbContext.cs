@@ -44,6 +44,7 @@ public class AppDbContext : DbContext
     public DbSet<BlockType> BlockTypes => Set<BlockType>();
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<BlockLine> BlockLines => Set<BlockLine>();
+    public DbSet<NeutralStamp> NeutralStamps => Set<NeutralStamp>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -224,6 +225,11 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ thuộc 1 block
             e.HasOne(x => x.Block).WithMany(x => x.Lines).HasForeignKey(x => x.BlockId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NeutralStamp>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.QrId }).IsUnique();   // 1 tem chỉ có 1 bản ghi trung tính
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

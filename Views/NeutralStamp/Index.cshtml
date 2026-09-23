@@ -1,0 +1,38 @@
+@model List<NeutralStamp>
+@{ ViewData["Title"] = "Tem trung tính"; var flag = ViewBag.FlagNeutral as bool?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h6 class="fw-bold mb-0">Tem trung tính / nghi vấn</h6>
+        <form method="post" action="/NeutralStamp/Detect" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>Rà soát tem nghi vấn</button>
+        </form>
+    </div>
+    <p class="text-muted small">Nghiệp vụ <b>Inv_InventoryNeutralID</b> (EQR): phát hiện các tem bị <b>xuất kho nhiều lần</b> (nghi vấn trùng/thất lạc) và đánh dấu vào bảng trung tính để rà soát. Tem đã xác nhận trung tính thì không thêm lại.</p>
+
+    <div class="btn-group btn-group-sm mb-3">
+        <a href="/NeutralStamp" class="btn btn-outline-secondary @(flag == null ? "active" : "")">Tất cả</a>
+        <a href="/NeutralStamp?flagNeutral=false" class="btn btn-outline-secondary @(flag == false ? "active" : "")">Nghi vấn</a>
+        <a href="/NeutralStamp?flagNeutral=true" class="btn btn-outline-secondary @(flag == true ? "active" : "")">Đã xác nhận</a>
+    </div>
+
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã tem</th><th class="text-end">Số lần xuất</th><th>Trạng thái</th><th>Ghi chú</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var n in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/NeutralStamp/Detail/@n.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@n.QrId</td>
+                <td class="text-end fw-semibold">@n.OutCount</td>
+                <td>
+                    @if (n.FlagNeutral) { <span class="badge text-bg-success">Đã xác nhận</span> }
+                    else { <span class="badge text-bg-warning">Nghi vấn</span> }
+                </td>
+                <td class="small text-muted">@n.Note</td>
+                <td class="small text-muted">@n.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có bản ghi trung tính nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

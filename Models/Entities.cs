@@ -273,6 +273,29 @@ public class SalesActivationLine : IOrgOwned
     public SalesActivation SalesActivation { get; set; } = null!;
 }
 
+// ── Tem trung tính / tem nghi vấn (Inv_InventoryNeutralID) — nghiệp vụ EQR ──
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InventoryNeutralID_InsertSuspectID,
+// file zTemp.cs): phát hiện các tem bị XUẤT KHO NHIỀU LẦN (nghi vấn trùng/
+// thất lạc) rồi đánh dấu vào bảng trung tính để rà soát. Ràng buộc EQR:
+//  - Chỉ xét các lần xuất trong khoảng thời gian (CreateDTimeUTC <= mốc).
+//  - Bỏ qua phiếu cho phép sửa (FlagAllowModify='1') và tem đã hủy phiếu xuất.
+//  - Tem xuất > 1 lần ở các phiếu khác nhau ⇒ nghi vấn (FlagNeutral='0').
+//  - Tem đã có trong bảng trung tính thì không thêm lại (chống trùng).
+// FlagNeutral: '0' = nghi vấn (suspect), '1' = đã xác nhận trung tính.
+public class NeutralStamp : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string QrId { get; set; } = "";        // IDNo — mã tem nghi vấn
+    public bool FlagNeutral { get; set; }           // FlagNeutral = '1'/'0' (false = nghi vấn)
+    public int OutCount { get; set; }               // số lần tem đã bị xuất kho (phát hiện)
+    public string? Note { get; set; }               // ghi chú xử lý
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ResolvedAt { get; set; }       // mốc xác nhận trung tính
+    public string? ResolvedBy { get; set; }
+}
+
 // ── Loại Block (Mst_BlockType) — master data cho nghiệp vụ Map_Block ──
 // Nghiệp vụ EQR (bảng Mst_BlockType, worker Mst_BlockType_CheckDB, file
 // Master.cs): danh mục loại Block quy định BlockSize (số tem/hộp tối đa

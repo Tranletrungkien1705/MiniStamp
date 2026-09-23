@@ -1,0 +1,42 @@
+@model NeutralStamp
+@{ ViewData["Title"] = $"Tem trung tính {Model.QrId}"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Tem <span style="font-family:monospace">@Model.QrId</span></h5>
+            <div class="text-muted small">Ghi nhận lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy</div>
+        </div>
+        <a href="/NeutralStamp" class="btn btn-sm btn-outline-primary align-self-start">Danh sách trung tính</a>
+    </div>
+</div></div>
+
+<div class="card mb-3"><div class="card-body">
+    <h6 class="fw-bold mb-3">Thông tin rà soát</h6>
+    <div class="row g-3">
+        <div class="col-6 col-md-3"><div class="small text-muted">Số lần xuất kho</div><div class="fw-semibold">@Model.OutCount</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Trạng thái</div>
+            <div>@if (Model.FlagNeutral) { <span class="badge text-bg-success">Đã xác nhận trung tính</span> } else { <span class="badge text-bg-warning">Nghi vấn</span> }</div>
+        </div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Xác nhận lúc</div><div>@(Model.ResolvedAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Người xác nhận</div><div>@(Model.ResolvedBy ?? "—")</div></div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Model.Note))
+    {
+        <div class="mt-3 text-muted small"><i class="bi bi-chat-left-text me-1"></i>@Model.Note</div>
+    }
+</div></div>
+
+@if (!Model.FlagNeutral)
+{
+    <div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Xác nhận trung tính</h6>
+        <form method="post" action="/NeutralStamp/Resolve/@Model.Id">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <label class="form-label small text-muted">Ghi chú xử lý</label>
+                <input name="note" class="form-control" placeholder="vd: đã đối chiếu, tem hợp lệ" />
+            </div>
+            <button class="btn btn-primary"><i class="bi bi-check2-circle me-1"></i>Xác nhận tem trung tính</button>
+        </form>
+    </div></div>
+}

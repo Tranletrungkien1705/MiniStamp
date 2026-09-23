@@ -53,6 +53,9 @@ public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Coun
 /// <summary>Kết quả gom tem vào Block (nghiệp vụ Map_Block).</summary>
 public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int QtyVerified);
 
+/// <summary>Kết quả rà soát tem trung tính (nghiệp vụ Inv_InventoryNeutralID).</summary>
+public record NeutralResult(bool Ok, string Message, int Detected, int Inserted);
+
 /// <summary>Kết quả kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate).</summary>
 public record WarrantyResult(bool Ok, string Message, int Id, string QrId, string WarrantyNo,
     DateTime WarrantyDateStart, bool IsFirstActivate, int WarrantyCount);
@@ -146,6 +149,11 @@ public interface IStampService
     Task<Block?> GetBlockAsync(int id);
     Task<BlockResult> CreateBlockAsync(string blockNo, int productId, string blockType, string? blockLocalId,
         string? shiftCode, string? lotCode, IEnumerable<string> qrIds, string? remark, string createdBy);
+    // tem trung tính / nghi vấn (Inv_InventoryNeutralID)
+    Task<List<NeutralStamp>> NeutralStampsAsync(bool? flagNeutral);
+    Task<NeutralStamp?> GetNeutralStampAsync(int id);
+    Task<NeutralResult> DetectSuspectStampsAsync(string createdBy);
+    Task<NeutralResult> ResolveNeutralStampAsync(int id, string? note, string resolvedBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -1313,6 +1321,73 @@ public class StampService(AppDbContext db) : IStampService
         await db.SaveChangesAsync();
 
         return new BlockResult(true, $"Đã gom {stamps.Count} tem vào block {block.BlockNo}.", block.Id, block.BlockNo, stamps.Count);
+    }
+
+    // ── TEM TRUNG TÍNH / NGHI VẤN (Inv_InventoryNeutralID) ──────────
+    public Task<List<NeutralStamp>> NeutralStampsAsync(bool? flagNeutral)
+    {
+        var q = db.NeutralStamps.AsQueryable();
+        if (flagNeutral.HasValue) q = q.Where(x => x.FlagNeutral == flagNeutral.Value);
+        return q.OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+    }
+
+    public Task<NeutralStamp?> GetNeutralStampAsync(int id) =>
+        db.NeutralStamps.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Rà soát tem nghi vấn. Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventoryNeutralID_InsertSuspectID của EQR (zTemp.cs):
+    /// - Tem bị XUẤT KHO NHIỀU LẦN (xuất hiện ở > 1 phiếu xuất khác nhau) ⇒ nghi vấn.
+    /// - Bỏ qua tem đã có bản ghi trung tính (chống trùng).
+    /// - Ghi vào bảng trung tính với FlagNeutral = false (nghi vấn).
+    /// </summary>
+    public async Task<NeutralResult> DetectSuspectStampsAsync(string createdBy)
+    {
+        // đếm số lần mỗi tem xuất hiện trong các dòng phiếu xuất
+        var outCounts = await db.ShipmentLines.IgnoreQueryFilters()
+            .GroupBy(l => l.QrId)
+            .Select(g => new { QrId = g.Key, Count = g.Count() })
+            .Where(x => x.Count > 1)
+            .ToListAsync();
+
+        if (outCounts.Count == 0)
+            return new NeutralResult(true, "Không phát hiện tem nào bị xuất kho nhiều lần.", 0, 0);
+
+        var suspectCodes = outCounts.Select(x => x.QrId).ToList();
+        var existing = await db.NeutralStamps.IgnoreQueryFilters()
+            .Where(x => suspectCodes.Contains(x.QrId)).Select(x => x.QrId).ToListAsync();
+
+        var toInsert = outCounts.Where(x => !existing.Contains(x.QrId)).ToList();
+        var now = DateTime.Now;
+        foreach (var x in toInsert)
+            db.NeutralStamps.Add(new NeutralStamp
+            {
+                QrId = x.QrId, FlagNeutral = false, OutCount = x.Count,
+                Note = $"Tem bị xuất kho {x.Count} lần — nghi vấn trùng/thất lạc.",
+                CreatedBy = createdBy, CreatedAt = now
+            });
+        if (toInsert.Count > 0) await db.SaveChangesAsync();
+
+        return new NeutralResult(true,
+            $"Phát hiện {outCounts.Count} tem nghi vấn, thêm mới {toInsert.Count} bản ghi trung tính.",
+            outCounts.Count, toInsert.Count);
+    }
+
+    /// <summary>
+    /// Xác nhận 1 tem là trung tính (đã rà soát xong) — đặt FlagNeutral = true.
+    /// </summary>
+    public async Task<NeutralResult> ResolveNeutralStampAsync(int id, string? note, string resolvedBy)
+    {
+        var n = await db.NeutralStamps.FirstOrDefaultAsync(x => x.Id == id);
+        if (n == null) return new NeutralResult(false, "Không tìm thấy bản ghi trung tính.", 0, 0);
+        if (n.FlagNeutral) return new NeutralResult(false, $"Tem {n.QrId} đã được xác nhận trung tính trước đó.", 0, 0);
+
+        n.FlagNeutral = true;
+        n.Note = string.IsNullOrWhiteSpace(note) ? n.Note : note.Trim();
+        n.ResolvedAt = DateTime.Now;
+        n.ResolvedBy = resolvedBy;
+        await db.SaveChangesAsync();
+        return new NeutralResult(true, $"Đã xác nhận tem {n.QrId} là trung tính.", 0, 0);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

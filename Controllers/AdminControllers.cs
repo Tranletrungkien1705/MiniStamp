@@ -190,6 +190,39 @@ public class BlockController(IStampService svc) : Controller
     }
 }
 
+// Tem trung tính / nghi vấn (nghiệp vụ Inv_InventoryNeutralID của EQR)
+public class NeutralStampController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(bool? flagNeutral)
+    {
+        ViewBag.FlagNeutral = flagNeutral;
+        return View(await svc.NeutralStampsAsync(flagNeutral));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var n = await svc.GetNeutralStampAsync(id);
+        if (n == null) return NotFound();
+        return View(n);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Detect()
+    {
+        var r = await svc.DetectSuspectStampsAsync("web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Resolve(int id, string? note)
+    {
+        var r = await svc.ResolveNeutralStampAsync(id, note, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 // Phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp của EQR)
 public class BrokenStampController(IStampService svc) : Controller
 {
