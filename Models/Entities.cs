@@ -1059,3 +1059,37 @@ public class StampUserLine : IOrgOwned
 
     public StampUser StampUser { get; set; } = null!;
 }
+
+// ── Kích hoạt tem trắng bởi Trạm bán hàng (Inv_InventoryVerifiedID_ActivateByTBH) ──
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InventoryVerifiedID_ActivateByTBH_New20210922,
+// file zTemp.cs): bước (6c) vòng đời tem — TRẠM BÁN HÀNG (TBH) kích hoạt 1 tem
+// TRẮNG (tem chưa gắn sản phẩm) ngay tại điểm bán: gắn ProductCode + khách hàng
+// (CustomerCode) + vùng thị trường (AreaCode) + ảnh chứng từ (ProofImagePath),
+// đồng thời tự sinh 1 phiếu xuất nội bộ (RefType=INVOUT, tiền tố PXKHTT) và
+// đánh dấu tem đã xuất bán. Khác với "kích hoạt bán hàng" (ActivateSales — theo
+// lô tem đã ghép sản phẩm): ở đây mỗi lần chỉ kích hoạt 1 tem lẻ, gắn luôn sản
+// phẩm + vùng + ảnh chứng từ. Ràng buộc EQR:
+//  - IDNo bắt buộc (đã chuẩn hoá nhiễu: bỏ space/'-'/tab/xuống dòng).
+//  - Tem phải tồn tại trong hệ thống.
+//  - Tem đã vô hiệu (Void)/rách-vỡ (Broken) → từ chối.
+//  - Tem đã kích hoạt bán hàng trước đó → từ chối (không kích hoạt trùng).
+public class TbhActivation : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TbhNo { get; set; } = "";          // mã phiếu kích hoạt TBH (duy nhất trong tenant)
+    public string RefNoSys { get; set; } = "";       // RefNoSys — mã phiếu xuất nội bộ tự sinh (PXKHTT...)
+    public string RefType { get; set; } = "INVOUT";  // RefType — luôn INVOUT (đúng EQR)
+    public string QrId { get; set; } = "";           // IDNo — tem trắng được kích hoạt
+    public string? Pin { get; set; }                  // PIN — mã cào (nếu có)
+    public int ProductId { get; set; }               // ProductCode — sản phẩm gắn khi kích hoạt
+    public string? CustomerCode { get; set; }         // CustomerCode — khách hàng tại điểm bán
+    public string? AreaCode { get; set; }             // AreaCode — vùng thị trường
+    public string? ProofImagePath { get; set; }       // ProofImagePath — ảnh chứng từ
+    public string? ProofImagePathName { get; set; }   // ProofImagePathName — tên ảnh chứng từ
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+}

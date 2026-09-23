@@ -1,0 +1,26 @@
+@model List<TbhActivation>
+@{ ViewData["Title"] = "Kích hoạt tem trắng (TBH)"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Kích hoạt tem trắng bởi Trạm bán hàng (Inv_InventoryVerifiedID_ActivateByTBH)</h6>
+        <a href="/TbhActivation/Create" class="btn btn-sm btn-primary"><i class="bi bi-shop me-1"></i>Kích hoạt tem trắng</a>
+    </div>
+    <p class="text-muted small">Trạm bán hàng kích hoạt <b>1 tem trắng</b> (tem chưa gắn sản phẩm) ngay tại điểm bán: gắn sản phẩm + khách hàng + vùng thị trường + ảnh chứng từ, tự sinh 1 phiếu xuất nội bộ (RefType=INVOUT, tiền tố <b>PXKHTT</b>) và đánh dấu tem <b>FlagSales='1'</b>.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã phiếu</th><th>Mã tem (IDNo)</th><th>Sản phẩm</th><th>Khách hàng</th><th>Vùng</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var t in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/TbhActivation/Detail/@t.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@t.TbhNo</td>
+                <td style="font-family:monospace">@t.QrId</td>
+                <td>@t.Product.Code — @t.Product.Name</td>
+                <td>@(string.IsNullOrWhiteSpace(t.CustomerCode) ? "—" : t.CustomerCode)</td>
+                <td>@(string.IsNullOrWhiteSpace(t.AreaCode) ? "—" : t.AreaCode)</td>
+                <td class="small text-muted">@t.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có phiếu kích hoạt tem trắng nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

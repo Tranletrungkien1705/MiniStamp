@@ -1050,3 +1050,34 @@ public class StampUserController(IStampService svc) : Controller
         return View(su);
     }
 }
+
+// Kích hoạt tem trắng bởi Trạm bán hàng (nghiệp vụ Inv_InventoryVerifiedID_ActivateByTBH của EQR)
+public class TbhActivationController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.TbhActivationsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? qrId, string? pin, int productId, string? customerCode,
+        string? areaCode, string? proofImagePath, string? proofImagePathName, string? remark)
+    {
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        var r = await svc.ActivateByTbhAsync(qrId ?? "", pin, productId, customerCode, areaCode,
+            proofImagePath, proofImagePathName, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var t = await svc.GetTbhActivationAsync(id);
+        if (t == null) return NotFound();
+        return View(t);
+    }
+}

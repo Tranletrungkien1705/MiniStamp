@@ -91,6 +91,9 @@ public record BoxShipCancelResult(bool Ok, string Message, int Id, string BsNo, 
 /// <summary>Kết quả nhập dãy serial người dùng (nghiệp vụ Inv_StampUser).</summary>
 public record StampUserResult(bool Ok, string Message, int Id, string SuiNo, int Imported, int Mapped);
 
+/// <summary>Kết quả kích hoạt tem trắng bởi Trạm bán hàng (nghiệp vụ Inv_InventoryVerifiedID_ActivateByTBH).</summary>
+public record TbhResult(bool Ok, string Message, int Id, string TbhNo, string QrId);
+
 public interface IStampService
 {
     // admin
@@ -231,6 +234,11 @@ public interface IStampService
     Task<List<StampUser>> StampUsersAsync();
     Task<StampUser?> GetStampUserAsync(int id);
     Task<StampUserResult> ImportStampUsersAsync(string suiNo, IEnumerable<(string IdNoUser, string? Remark)> serials, string createdBy);
+    // kích hoạt tem trắng bởi Trạm bán hàng (Inv_InventoryVerifiedID_ActivateByTBH)
+    Task<List<TbhActivation>> TbhActivationsAsync();
+    Task<TbhActivation?> GetTbhActivationAsync(int id);
+    Task<TbhResult> ActivateByTbhAsync(string qrId, string? pin, int productId, string? customerCode,
+        string? areaCode, string? proofImagePath, string? proofImagePathName, string? remark, string createdBy);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -2345,5 +2353,71 @@ public class StampService(AppDbContext db) : IStampService
         await db.SaveChangesAsync();
 
         return new StampUserResult(true, $"Đã nhập {su.Lines.Count} serial người dùng và gắn vào {available.Count} tem.", su.Id, su.SuiNo, su.Lines.Count, available.Count);
+    }
+
+    // ── KÍCH HOẠT TEM TRẮNG BỞI TRẠM BÁN HÀNG (Inv_InventoryVerifiedID_ActivateByTBH) ──
+    public Task<List<TbhActivation>> TbhActivationsAsync() =>
+        db.TbhActivations.Include(x => x.Product).OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+
+    public Task<TbhActivation?> GetTbhActivationAsync(int id) =>
+        db.TbhActivations.Include(x => x.Product).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Kích hoạt 1 tem TRẮNG bởi Trạm bán hàng (TBH). Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventoryVerifiedID_ActivateByTBH_New20210922 của EQR (zTemp.cs):
+    /// - IDNo bắt buộc; chuẩn hoá nhiễu (bỏ space/'-'/tab/xuống dòng) đúng EQR.
+    /// - Tem phải tồn tại trong hệ thống.
+    /// - Tem đã vô hiệu (Void)/rách-vỡ (Broken) → từ chối.
+    /// - Tem đã kích hoạt bán hàng trước đó → từ chối (không kích hoạt trùng).
+    /// - Sinh 1 phiếu xuất nội bộ (RefType=INVOUT, tiền tố PXKHTT) + đánh dấu tem
+    ///   FlagSales='1' + SalesDTime + CustomerCode (đúng các cột EQR set).
+    /// </summary>
+    public async Task<TbhResult> ActivateByTbhAsync(string qrId, string? pin, int productId, string? customerCode,
+        string? areaCode, string? proofImagePath, string? proofImagePathName, string? remark, string createdBy)
+    {
+        // 20210222: Xử lý nhiễu cho mã tem — bỏ space, '-', tab, xuống dòng (đúng EQR)
+        var code = new string((qrId ?? "").Where(c => c != ' ' && c != '-' && c != '\r' && c != '\t' && c != '\n').ToArray())
+            .Trim().ToUpperInvariant();
+        if (code.Length == 0) return new TbhResult(false, "Cần nhập mã tem (IDNo).", 0, "", "");
+
+        var stamp = await db.Stamps.FirstOrDefaultAsync(s => s.QrId == code);
+        if (stamp == null) return new TbhResult(false, $"Không tìm thấy tem {code} trong hệ thống.", 0, "", code);
+
+        if (stamp.Status == StampStatus.Void || stamp.Status == StampStatus.Broken)
+            return new TbhResult(false, $"Tem {code} đã vô hiệu/rách-vỡ, không thể kích hoạt.", 0, "", code);
+
+        if (stamp.FlagSales)
+            return new TbhResult(false, $"Tem {code} đã được kích hoạt bán trước đó.", 0, "", code);
+
+        var now = DateTime.Now;
+        var tbhNo = $"PXKHTT{now:yyMMddHHmmss}";
+        if (await db.TbhActivations.AnyAsync(x => x.TbhNo == tbhNo))
+            tbhNo = $"PXKHTT{now:yyMMddHHmmssfff}";
+
+        var tbh = new TbhActivation
+        {
+            TbhNo = tbhNo,
+            RefNoSys = $"PXKHTT.{now:yyyyMMdd.HHmmss}.0",   // đúng định dạng RefNoSys của EQR
+            RefType = "INVOUT",
+            QrId = stamp.QrId,
+            Pin = string.IsNullOrWhiteSpace(pin) ? null : pin!.Trim(),
+            ProductId = productId > 0 ? productId : stamp.ProductId,
+            CustomerCode = string.IsNullOrWhiteSpace(customerCode) ? null : customerCode!.Trim(),
+            AreaCode = string.IsNullOrWhiteSpace(areaCode) ? null : areaCode!.Trim(),
+            ProofImagePath = string.IsNullOrWhiteSpace(proofImagePath) ? null : proofImagePath!.Trim(),
+            ProofImagePathName = string.IsNullOrWhiteSpace(proofImagePathName) ? null : proofImagePathName!.Trim(),
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+
+        // đánh dấu tem đã xuất bán (đúng các cột EQR set khi kích hoạt TBH)
+        stamp.FlagSales = true;
+        stamp.SalesDTime = now;
+        stamp.CustomerCode = tbh.CustomerCode;
+
+        db.TbhActivations.Add(tbh);
+        await db.SaveChangesAsync();
+
+        return new TbhResult(true, $"Đã kích hoạt tem trắng {stamp.QrId} bởi Trạm bán hàng ({tbh.TbhNo}).", tbh.Id, tbh.TbhNo, stamp.QrId);
     }
 }

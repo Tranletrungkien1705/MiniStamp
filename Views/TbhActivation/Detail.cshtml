@@ -1,0 +1,36 @@
+@model TbhActivation
+@{
+    ViewData["Title"] = $"Kích hoạt tem trắng {Model.TbhNo}";
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Kích hoạt tem trắng bởi Trạm bán hàng <span style="font-family:monospace">@Model.TbhNo</span></h5>
+            <div class="text-muted small">Mã tem (IDNo): <b style="font-family:monospace">@Model.QrId</b></div>
+            <div class="text-muted small">Sản phẩm: <b>@Model.Product.Code — @Model.Product.Name</b></div>
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerCode)) { <div class="text-muted small">Khách hàng: <b>@Model.CustomerCode</b></div> }
+            @if (!string.IsNullOrWhiteSpace(Model.AreaCode)) { <div class="text-muted small">Vùng thị trường: @Model.AreaCode</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.Pin)) { <div class="text-muted small">PIN: @Model.Pin</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.ProofImagePath)) { <div class="text-muted small">Ảnh chứng từ: @Model.ProofImagePathName (@Model.ProofImagePath)</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.RefNoSys)) { <div class="text-muted small">Phiếu xuất nội bộ: @Model.RefNoSys (@Model.RefType)</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <span class="badge bg-success">ĐÃ KÍCH HOẠT TEM TRẮNG</span>
+            <a href="/TbhActivation" class="btn btn-sm btn-outline-primary">Danh sách phiếu</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Phiếu xuất nội bộ tự sinh</h6>
+    <table class="table table-sm align-middle mb-0">
+        <tbody>
+            <tr><td class="text-muted" style="width:220px">Mã phiếu (RefNoSys)</td><td style="font-family:monospace">@Model.RefNoSys</td></tr>
+            <tr><td class="text-muted">Loại phiếu (RefType)</td><td>@Model.RefType</td></tr>
+            <tr><td class="text-muted">Mã tem (IDNo)</td><td style="font-family:monospace">@Model.QrId</td></tr>
+            <tr><td class="text-muted">Trạng thái tem</td><td><span class="badge bg-success">FlagSales = 1 (đã kích hoạt bán)</span></td></tr>
+            <tr><td class="text-muted">Tạo lúc</td><td class="small text-muted">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td></tr>
+        </tbody>
+    </table>
+</div></div>

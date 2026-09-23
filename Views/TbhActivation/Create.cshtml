@@ -1,0 +1,48 @@
+@{
+    ViewData["Title"] = "Kích hoạt tem trắng (TBH)";
+}
+<div class="card" style="max-width:900px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-6">
+                <label class="form-label small text-muted">Mã tem (IDNo)</label>
+                <input name="qrId" class="form-control" style="font-family:monospace" placeholder="Quét hoặc nhập mã tem trắng..." />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Mã PIN (nếu có)</label>
+                <input name="pin" class="form-control" placeholder="Mã cào" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Vùng thị trường (AreaCode)</label>
+                <input name="areaCode" class="form-control" placeholder="VD: MienBac" />
+            </div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-6">
+                <label class="form-label small text-muted">Sản phẩm</label>
+                <select name="productId" class="form-select">
+                    <option value="0">— Chọn sản phẩm —</option>
+                    @foreach (var p in (List<Product>)ViewBag.Products)
+                    { <option value="@p.Id">@p.Code — @p.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small text-muted">Mã khách hàng</label>
+                <input name="customerCode" class="form-control" placeholder="VD: KH001" />
+            </div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-6">
+                <label class="form-label small text-muted">Ảnh chứng từ (đường dẫn)</label>
+                <input name="proofImagePath" class="form-control" placeholder="VD: /uploads/tbh/..." />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small text-muted">Tên ảnh chứng từ</label>
+                <input name="proofImagePathName" class="form-control" placeholder="VD: bienban.jpg" />
+            </div>
+        </div>
+        <div class="mb-2"><label class="form-label small text-muted">Ghi chú</label><input name="remark" class="form-control" /></div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-shop me-1"></i>Kích hoạt tem trắng</button> <a href="/TbhActivation" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>
