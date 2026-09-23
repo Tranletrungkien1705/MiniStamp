@@ -38,6 +38,9 @@ public record ShipCancelResult(bool Ok, string Message, int Id, string ShipmentN
 /// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
 public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
 
+/// <summary>Kết quả tạo phiên sản xuất (nghiệp vụ InvF_ProductionSession).</summary>
+public record PsResult(bool Ok, string Message, int Id, string PsNo, int QtyVerified);
+
 /// <summary>Kết quả thao tác danh mục nguồn gốc (nghiệp vụ Mst_NguonGoc).</summary>
 public record OriginResult(bool Ok, string Message, int Id, string Code);
 
@@ -129,6 +132,11 @@ public interface IStampService
     Task<PaResult> CreateProductionActiveAsync(string paNo, string refNo, string origin, int productId,
         int qtyPlan, DateTime productDate, int productLifeId, string listSerialIn, string listSerialOut, string createdBy);
     Task<PaResult> DeleteProductionActiveAsync(int id);
+    // phiên sản xuất (InvF_ProductionSession)
+    Task<List<ProductionSession>> ProductionSessionsAsync();
+    Task<ProductionSession?> GetProductionSessionAsync(int id);
+    Task<PsResult> CreateProductionSessionAsync(string psNo, string? orgCode, string? shiftCode, string? lotCode,
+        int productId, int qtyInput, IEnumerable<string> qrIds, string? remark, string createdBy);
     // danh mục nguồn gốc (Mst_NguonGoc)
     Task<List<OriginCatalog>> OriginsAsync(string? q);
     Task<OriginCatalog?> GetOriginAsync(int id);

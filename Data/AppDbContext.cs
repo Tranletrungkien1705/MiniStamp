@@ -32,6 +32,8 @@ public class AppDbContext : DbContext
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
     public DbSet<ProductLife> ProductLives => Set<ProductLife>();
     public DbSet<ProductionActive> ProductionActives => Set<ProductionActive>();
+    public DbSet<ProductionSession> ProductionSessions => Set<ProductionSession>();
+    public DbSet<ProductionSessionLine> ProductionSessionLines => Set<ProductionSessionLine>();
     public DbSet<OriginCatalog> OriginCatalogs => Set<OriginCatalog>();
     public DbSet<Gs1Location> Gs1Locations => Set<Gs1Location>();
     public DbSet<TraceEventType> TraceEventTypes => Set<TraceEventType>();
@@ -167,6 +169,18 @@ public class AppDbContext : DbContext
         b.Entity<OriginCatalog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // NguonGocCode duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductionSession>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PsNo }).IsUnique();   // IF_PSNo duy nhất trong tenant
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductionSessionLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ thuộc 1 phiên sản xuất
+            e.HasOne(x => x.ProductionSession).WithMany(x => x.Lines).HasForeignKey(x => x.ProductionSessionId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Gs1Location>(e =>

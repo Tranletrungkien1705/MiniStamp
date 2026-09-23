@@ -578,6 +578,50 @@ public class ProductionActive : IOrgOwned
     public ProductLife ProductLife { get; set; } = null!;
 }
 
+// ── Phiên sản xuất (InvF_ProductionSession) — nghiệp vụ EQR ──────────
+// Nghiệp vụ EQR (worker LIVE WAS_InvF_ProductionSession_Add, file zTemp.cs):
+// ghi nhận 1 PHIÊN SẢN XUẤT (ca sản xuất) — gom 1 dãy tem (IDNo) đã quét
+// vào 1 phiên theo (ShiftCode ca, LotCode lô, ProductCode sản phẩm).
+// Đây là bước (2) vòng đời tem: SẢN XUẤT / GHÉP SẢN PHẨM.
+// Ràng buộc EQR:
+//  - IF_PSNo (mã phiên) bắt buộc + duy nhất (chặn trùng phiên).
+//  - OrgID phải tồn tại; ProductCode (nếu có) phải tồn tại.
+//  - Phải có ít nhất 1 dòng tem (IDNo).
+//  - Mọi IDNo phải tồn tại trong kho sinh số (Inv_InventoryGenID).
+//  - QtyVerified = số tem thực tế đã ghi nhận vào phiên.
+//  - "Rút ruột": tem đã thuộc phiên khác thì gỡ khỏi phiên cũ, chuyển sang phiên này.
+public class ProductionSession : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PsNo { get; set; } = "";        // IF_PSNo — mã phiên sản xuất (duy nhất trong tenant)
+    public string? OrgCode { get; set; }            // OrgID — đơn vị sản xuất
+    public string? ShiftCode { get; set; }          // ShiftCode — ca sản xuất
+    public string? LotCode { get; set; }            // LotCode — mã lô
+    public int ProductId { get; set; }              // ProductCode — sản phẩm (0 = chưa gắn)
+    public int QtyInput { get; set; }               // QtyInput — số lượng kế hoạch nhập
+    public int QtyVerified { get; set; }            // QtyVerified — số tem thực tế đã ghi nhận
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product? Product { get; set; }
+    public List<ProductionSessionLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiên sản xuất (1 tem đã quét vào phiên) ───────────
+public class ProductionSessionLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ProductionSessionId { get; set; }
+    public string QrId { get; set; } = "";        // IDNo — mã tem đã quét vào phiên
+    public int Idx { get; set; }                    // Idx — thứ tự quét trong phiên
+    public DateTime AddedAt { get; set; } = DateTime.Now;
+
+    public ProductionSession ProductionSession { get; set; } = null!;
+}
+
 // ── Danh mục Nguồn gốc (Mst_NguonGoc) — master data ──────────────────
 // Nghiệp vụ EQR: danh mục nguồn gốc (trang trại/vùng trồng) dùng cho trường
 // "Nguồn gốc" ở màn Kích hoạt thông tin sản xuất, kèm thông tin chứng chỉ
