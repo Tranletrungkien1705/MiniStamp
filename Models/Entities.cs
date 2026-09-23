@@ -338,6 +338,35 @@ public class NeutralStamp : IOrgOwned
     public string? ResolvedBy { get; set; }
 }
 
+// ── Tem bí mật / serial ẩn (Inv_InventorySecret) — nghiệp vụ EQR ─────
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InventorySecret_Get /
+// WAS_Inv_InventorySecret_UpdateFlagUsed, file License.cs): mỗi lần sinh
+// tem, hệ thống sinh kèm 1 dãy "serial bí mật" (SecretNo) gắn với tem
+// (QR_SerialNo) để đối soát/đánh dấu đã dùng. Ràng buộc EQR:
+//  - SerialNo bắt buộc + duy nhất (khóa bản ghi).
+//  - Khi đánh dấu đã dùng: serial phải TỒN TẠI (InvalidSerial).
+//  - Serial chưa được dùng (FlagUsed='0') mới đánh dấu được (InvalidFlagUsed).
+//  - Serial phải thuộc đúng MST đang đăng nhập (InvalidMST).
+//  - Mỗi lần đánh dấu, cộng dồn TotalQtyUsed vào quota Invoice_license.
+// FlagUsed: '1' = đã dùng, '0' = chưa dùng. FlagMap: '1' = đã gắn tem.
+public class InventorySecret : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SerialNo { get; set; } = "";      // SerialNo — serial bí mật (duy nhất trong tenant)
+    public string? QrSerialNo { get; set; }          // QR_SerialNo — tem gắn kèm
+    public string? Mst { get; set; }                  // MST — mã người nộp thuế sở hữu
+    public string? GenTimesNo { get; set; }           // GenTimesNo — lô sinh tem
+    public string? SecretNo { get; set; }             // SecretNo — mã bí mật in kèm
+    public bool FlagMap { get; set; }                 // FlagMap = '1'/'0' (đã gắn tem)
+    public bool FlagUsed { get; set; }                // FlagUsed = '1'/'0' (đã dùng)
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UsedAt { get; set; }             // LogLUDTimeUTC — mốc đánh dấu đã dùng
+    public string? UsedBy { get; set; }               // LogLUBy — người đánh dấu
+}
+
 // ── Yêu cầu xuất kho (InvF_ReqInvOut) — nghiệp vụ EQR ────────────────
 // Nghiệp vụ EQR (worker LIVE WAS_InvF_ReqInvOut_Save / _Approve,
 // file InventoryForm.cs): phiếu YÊU CẦU xuất kho do người dùng lập (theo

@@ -68,6 +68,9 @@ public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int Q
 /// <summary>Kết quả rà soát tem trung tính (nghiệp vụ Inv_InventoryNeutralID).</summary>
 public record NeutralResult(bool Ok, string Message, int Detected, int Inserted);
 
+/// <summary>Kết quả thao tác serial bí mật (nghiệp vụ Inv_InventorySecret).</summary>
+public record SecretResult(bool Ok, string Message, int Id, int Marked);
+
 /// <summary>Kết quả thao tác yêu cầu xuất kho (nghiệp vụ InvF_ReqInvOut).</summary>
 public record ReqInvOutResult(bool Ok, string Message, int Id, string ReqInvOutNo, string Status);
 
@@ -190,6 +193,11 @@ public interface IStampService
     Task<NeutralStamp?> GetNeutralStampAsync(int id);
     Task<NeutralResult> DetectSuspectStampsAsync(string createdBy);
     Task<NeutralResult> ResolveNeutralStampAsync(int id, string? note, string resolvedBy);
+    // tem bí mật / serial ẩn (Inv_InventorySecret)
+    Task<List<InventorySecret>> InventorySecretsAsync(string? q, bool? flagUsed);
+    Task<InventorySecret?> GetInventorySecretAsync(int id);
+    Task<SecretResult> CreateInventorySecretAsync(string serialNo, string? qrSerialNo, string? mst, string? genTimesNo, string? secretNo, string? remark, string createdBy);
+    Task<SecretResult> MarkSecretsUsedAsync(IEnumerable<string> serialNos, string? mst, string usedBy);
     // yêu cầu xuất kho (InvF_ReqInvOut)
     Task<List<ReqInvOut>> ReqInvOutsAsync();
     Task<ReqInvOut?> GetReqInvOutAsync(int id);
@@ -1662,6 +1670,92 @@ public class StampService(AppDbContext db) : IStampService
         n.ResolvedBy = resolvedBy;
         await db.SaveChangesAsync();
         return new NeutralResult(true, $"Đã xác nhận tem {n.QrId} là trung tính.", 0, 0);
+    }
+
+    // ── TEM BÍ MẬT / SERIAL ẨN (Inv_InventorySecret) ────────────────
+    public Task<List<InventorySecret>> InventorySecretsAsync(string? q, bool? flagUsed)
+    {
+        var query = db.InventorySecrets.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var k = q.Trim();
+            query = query.Where(x => x.SerialNo.Contains(k) || (x.QrSerialNo != null && x.QrSerialNo.Contains(k)));
+        }
+        if (flagUsed.HasValue) query = query.Where(x => x.FlagUsed == flagUsed.Value);
+        return query.OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+    }
+
+    public Task<InventorySecret?> GetInventorySecretAsync(int id) =>
+        db.InventorySecrets.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo 1 serial bí mật (Inv_InventorySecret). Ràng buộc EQR: SerialNo bắt buộc + duy nhất.
+    /// </summary>
+    public async Task<SecretResult> CreateInventorySecretAsync(string serialNo, string? qrSerialNo, string? mst,
+        string? genTimesNo, string? secretNo, string? remark, string createdBy)
+    {
+        serialNo = (serialNo ?? "").Trim();
+        if (serialNo.Length == 0) return new SecretResult(false, "SerialNo không được để trống.", 0, 0);
+        if (await db.InventorySecrets.AnyAsync(x => x.SerialNo == serialNo))
+            return new SecretResult(false, $"SerialNo {serialNo} đã tồn tại.", 0, 0);
+
+        var s = new InventorySecret
+        {
+            SerialNo = serialNo,
+            QrSerialNo = string.IsNullOrWhiteSpace(qrSerialNo) ? null : qrSerialNo.Trim(),
+            Mst = string.IsNullOrWhiteSpace(mst) ? null : mst.Trim(),
+            GenTimesNo = string.IsNullOrWhiteSpace(genTimesNo) ? null : genTimesNo.Trim(),
+            SecretNo = string.IsNullOrWhiteSpace(secretNo) ? null : secretNo.Trim(),
+            FlagMap = !string.IsNullOrWhiteSpace(qrSerialNo),
+            FlagUsed = false,
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+        db.InventorySecrets.Add(s);
+        await db.SaveChangesAsync();
+        return new SecretResult(true, $"Đã tạo serial bí mật {s.SerialNo}.", s.Id, 0);
+    }
+
+    /// <summary>
+    /// Đánh dấu 1 dãy serial bí mật là ĐÃ DÙNG. Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventorySecret_UpdateFlagUsed của EQR (License.cs):
+    /// - Serial phải TỒN TẠI (InvalidSerial).
+    /// - Serial chưa được dùng (FlagUsed='0') mới đánh dấu được (InvalidFlagUsed).
+    /// - Serial phải thuộc đúng MST đang thao tác (InvalidMST).
+    /// - Cộng dồn số lượng đã dùng (TotalQtyUsed) để đối soát quota.
+    /// </summary>
+    public async Task<SecretResult> MarkSecretsUsedAsync(IEnumerable<string> serialNos, string? mst, string usedBy)
+    {
+        var codes = (serialNos ?? []).Select(c => (c ?? "").Trim()).Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new SecretResult(false, "Chưa nhập serial nào.", 0, 0);
+
+        var secrets = await db.InventorySecrets.Where(x => codes.Contains(x.SerialNo)).ToListAsync();
+        var missing = codes.Except(secrets.Select(s => s.SerialNo)).ToList();
+        if (missing.Count > 0)
+            return new SecretResult(false, $"Không tìm thấy {missing.Count} serial: {string.Join(", ", missing.Take(10))}", 0, 0);
+
+        var used = secrets.Where(s => s.FlagUsed).Select(s => s.SerialNo).ToList();
+        if (used.Count > 0)
+            return new SecretResult(false, $"{used.Count} serial đã được dùng trước đó: {string.Join(", ", used.Take(10))}", 0, 0);
+
+        if (!string.IsNullOrWhiteSpace(mst))
+        {
+            var wrongMst = secrets.Where(s => !string.IsNullOrWhiteSpace(s.Mst) && s.Mst != mst.Trim())
+                .Select(s => s.SerialNo).ToList();
+            if (wrongMst.Count > 0)
+                return new SecretResult(false, $"{wrongMst.Count} serial không thuộc MST {mst}: {string.Join(", ", wrongMst.Take(10))}", 0, 0);
+        }
+
+        var now = DateTime.Now;
+        foreach (var s in secrets)
+        {
+            s.FlagUsed = true;
+            s.UsedAt = now;
+            s.UsedBy = usedBy;
+        }
+        await db.SaveChangesAsync();
+
+        return new SecretResult(true, $"Đã đánh dấu {secrets.Count} serial bí mật là đã dùng.", 0, secrets.Count);
     }
 
     // ── YÊU CẦU XUẤT KHO (InvF_ReqInvOut) ───────────────────────────

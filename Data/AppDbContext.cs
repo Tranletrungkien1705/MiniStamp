@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<BlockLine> BlockLines => Set<BlockLine>();
     public DbSet<NeutralStamp> NeutralStamps => Set<NeutralStamp>();
+    public DbSet<InventorySecret> InventorySecrets => Set<InventorySecret>();
     public DbSet<ReqInvOut> ReqInvOuts => Set<ReqInvOut>();
     public DbSet<ReqInvOutDtl> ReqInvOutDtls => Set<ReqInvOutDtl>();
     public DbSet<StampLifecyclePeriod> StampLifecyclePeriods => Set<StampLifecyclePeriod>();
@@ -260,6 +261,11 @@ public class AppDbContext : DbContext
         b.Entity<NeutralStamp>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.QrId }).IsUnique();   // 1 tem chỉ có 1 bản ghi trung tính
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InventorySecret>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SerialNo }).IsUnique();   // SerialNo duy nhất trong tenant
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ReqInvOut>(e =>

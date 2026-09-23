@@ -1,0 +1,24 @@
+@{
+    ViewData["Title"] = "Tạo serial bí mật";
+}
+<div class="card" style="max-width:720px"><div class="card-body">
+    <p class="text-muted small">Tạo 1 serial bí mật (nghiệp vụ <b>Inv_InventorySecret</b>). SerialNo bắt buộc và duy nhất trong tenant.</p>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small text-muted">SerialNo *</label>
+                <input name="serialNo" class="form-control" style="font-family:monospace" required /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">QR_SerialNo (tem gắn kèm)</label>
+                <input name="qrSerialNo" class="form-control" style="font-family:monospace" placeholder="Tùy chọn" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">MST (mã người nộp thuế)</label>
+                <input name="mst" class="form-control" placeholder="vd 2600123456" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">GenTimesNo (lô sinh tem)</label>
+                <input name="genTimesNo" class="form-control" placeholder="Tùy chọn" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">SecretNo (mã bí mật in kèm)</label>
+                <input name="secretNo" class="form-control" style="font-family:monospace" placeholder="Tùy chọn" /></div>
+            <div class="col-12"><label class="form-label small text-muted">Ghi chú</label>
+                <input name="remark" class="form-control" placeholder="Tùy chọn" /></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Tạo serial</button> <a href="/InventorySecret" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

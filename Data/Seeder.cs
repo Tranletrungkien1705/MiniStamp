@@ -141,6 +141,25 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
 
+            // Serial bí mật mẫu (Inv_InventorySecret) — 3 serial gắn với 3 tem đầu lô
+            var secretStamps = batch.Stamps.Take(3).ToList();
+            for (int i = 0; i < secretStamps.Count; i++)
+            {
+                db.InventorySecrets.Add(new InventorySecret
+                {
+                    SerialNo = $"SEC-SEED-{i + 1:D3}",
+                    QrSerialNo = secretStamps[i].QrId,
+                    Mst = "2600123456",
+                    GenTimesNo = batch.Code,
+                    SecretNo = $"SCR{i + 1:D4}",
+                    FlagMap = true,
+                    FlagUsed = false,
+                    Remark = "Serial bí mật mẫu",
+                    CreatedBy = "seed"
+                });
+            }
+            await db.SaveChangesAsync();
+
             // 1 phiếu tem rách/vỡ mẫu: ghi nhận 2 tem cuối của lô là lỗi (InvF_BrokenStamp)
             var broken = new BrokenStamp { BsNo = "BS-SEED-001", ProductId = p1.Id, Note = "Tem rách khi dán nhãn", CreatedBy = "seed" };
             db.BrokenStamps.Add(broken);
@@ -421,7 +440,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods", "BoxShipments", "BoxShipmentLines" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "InventorySecrets", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods", "BoxShipments", "BoxShipmentLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

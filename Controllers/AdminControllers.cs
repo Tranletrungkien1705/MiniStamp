@@ -248,6 +248,45 @@ public class NeutralStampController(IStampService svc) : Controller
     }
 }
 
+// Tem bí mật / serial ẩn (nghiệp vụ Inv_InventorySecret của EQR)
+public class InventorySecretController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? flagUsed)
+    {
+        ViewBag.Q = q; ViewBag.FlagUsed = flagUsed;
+        return View(await svc.InventorySecretsAsync(q, flagUsed));
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? serialNo, string? qrSerialNo, string? mst, string? genTimesNo,
+        string? secretNo, string? remark)
+    {
+        if (string.IsNullOrWhiteSpace(serialNo)) { TempData["Error"] = "Cần nhập SerialNo."; return View(); }
+        var r = await svc.CreateInventorySecretAsync(serialNo, qrSerialNo, mst, genTimesNo, secretNo, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var s = await svc.GetInventorySecretAsync(id);
+        if (s == null) return NotFound();
+        return View(s);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkUsed(string? serials, string? mst)
+    {
+        var list = (serials ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        var r = await svc.MarkSecretsUsedAsync(list, mst, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp của EQR)
 public class BrokenStampController(IStampService svc) : Controller
 {

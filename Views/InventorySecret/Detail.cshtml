@@ -1,0 +1,30 @@
+@model InventorySecret
+@{ ViewData["Title"] = $"Serial bí mật {Model.SerialNo}"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Serial <span style="font-family:monospace">@Model.SerialNo</span></h5>
+            <div class="text-muted small">Tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy</div>
+        </div>
+        <a href="/InventorySecret" class="btn btn-sm btn-outline-primary align-self-start">Danh sách serial</a>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Thông tin serial</h6>
+    <div class="row g-3">
+        <div class="col-6 col-md-3"><div class="small text-muted">QR_SerialNo</div><div style="font-family:monospace">@(Model.QrSerialNo ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">MST</div><div>@(Model.Mst ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">GenTimesNo</div><div>@(Model.GenTimesNo ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">SecretNo</div><div style="font-family:monospace">@(Model.SecretNo ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">FlagMap</div><div>@(Model.FlagMap ? "1 (đã gắn tem)" : "0")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Trạng thái</div>
+            <div>@if (Model.FlagUsed) { <span class="badge text-bg-success">Đã dùng</span> } else { <span class="badge text-bg-secondary">Chưa dùng</span> }</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Đánh dấu lúc</div><div>@(Model.UsedAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")</div></div>
+        <div class="col-6 col-md-3"><div class="small text-muted">Người đánh dấu</div><div>@(Model.UsedBy ?? "—")</div></div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Model.Remark))
+    {
+        <div class="mt-3 text-muted small"><i class="bi bi-chat-left-text me-1"></i>@Model.Remark</div>
+    }
+</div></div>
