@@ -432,6 +432,14 @@ public class ShipmentController(IStampService svc) : Controller
         TempData[r.Ok ? "Success" : "Error"] = r.Message;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var r = await svc.CancelShipmentAsync(id, reason, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 // Kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive của EQR)

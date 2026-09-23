@@ -251,6 +251,11 @@ public class Shipment : IOrgOwned
     public DateTime? ShippedAt { get; set; }
     public string? ShippedBy { get; set; }
 
+    // hủy phiếu xuất (Inv_VerifiedIDInOut_Cancel) — nghiệp vụ EQR
+    public DateTime? CancelledAt { get; set; }        // mốc hủy phiếu
+    public string? CancelledBy { get; set; }          // người hủy
+    public string? CancelReason { get; set; }         // lý do hủy
+
     public List<ShipmentLine> Lines { get; set; } = [];
 }
 

@@ -19,6 +19,7 @@
             { <div class="text-muted small">Đơn hàng nguồn: @Model.RefNoSys @Model.RefNo @Model.RefType</div> }
             @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
             @if (Model.ShippedAt != null) { <div class="text-muted small">Xuất lúc @Model.ShippedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ShippedBy</div> }
+            @if (Model.CancelledAt != null) { <div class="text-muted small">Hủy lúc @Model.CancelledAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.CancelledBy@(string.IsNullOrWhiteSpace(Model.CancelReason) ? "" : " · lý do: " + Model.CancelReason)</div> }
         </div>
         <div class="d-flex flex-column align-items-end gap-2">
             @if (Model.Status == "SHIPPED") { <span class="badge bg-success">SHIPPED</span> }
@@ -29,6 +30,15 @@
                 <form asp-action="Ship" asp-route-id="@Model.Id" method="post">
                     @Html.AntiForgeryToken()
                     <button class="btn btn-sm btn-primary"><i class="bi bi-truck me-1"></i>Xuất phiếu</button>
+                </form>
+            }
+            @if (Model.Status == "SHIPPED")
+            {
+                <form asp-action="Cancel" asp-route-id="@Model.Id" method="post" class="d-flex gap-1"
+                      onsubmit="return confirm('Hủy phiếu xuất @Model.ShipmentNo? Tem trong phiếu sẽ trở về trạng thái chưa xuất.');">
+                    @Html.AntiForgeryToken()
+                    <input name="reason" class="form-control form-control-sm" style="width:180px" placeholder="Lý do hủy (tùy chọn)" />
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Hủy phiếu</button>
                 </form>
             }
             <a href="/Shipment" class="btn btn-sm btn-outline-primary">Danh sách phiếu</a>

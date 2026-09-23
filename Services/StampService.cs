@@ -32,6 +32,9 @@ public record InvOutResult(bool Ok, string Message, int Id, string InvOutFGNo, i
 /// <summary>Kết quả tạo/xuất phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut).</summary>
 public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int TotalQty);
 
+/// <summary>Kết quả hủy phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_Cancel).</summary>
+public record ShipCancelResult(bool Ok, string Message, int Id, string ShipmentNo, int Released);
+
 /// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
 public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
 
@@ -118,6 +121,7 @@ public interface IStampService
     Task<Shipment?> GetShipmentAsync(int id);
     Task<ShipResult> CreateShipmentAsync(Shipment header, IEnumerable<string> qrIds, string createdBy);
     Task<ShipResult> ShipShipmentAsync(int id, string shippedBy);
+    Task<ShipCancelResult> CancelShipmentAsync(int id, string? reason, string cancelledBy);
     // kích hoạt thông tin sản xuất (InvF_ProductionActive)
     Task<List<ProductLife>> ProductLivesAsync();
     Task<List<ProductionActive>> ProductionActivesAsync();
@@ -770,6 +774,41 @@ public class StampService(AppDbContext db) : IStampService
         sh.ShippedBy = shippedBy;
         await db.SaveChangesAsync();
         return new ShipResult(true, $"Đã xuất phiếu {sh.ShipmentNo} ({stamps.Count} tem).", sh.Id, sh.ShipmentNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Hủy phiếu xuất kho theo tem. Mô phỏng nghiệp vụ
+    /// WAS_Inv_VerifiedIDInOut_Cancel_New20230316 của EQR (Temp.cs):
+    /// - Phiếu phải tồn tại và chưa bị hủy (không hủy trùng).
+    /// - Phiếu đã xuất (SHIPPED) mới được hủy; phiếu PENDING chưa xuất thì không có gì để hủy.
+    /// - Hủy xong: Status = CANCEL + ghi mốc/người/lý do hủy.
+    /// - Giải phóng tem: gỡ liên kết phiếu xuất (ShipmentId/ShippedAt/CustomerCode) để tem
+    ///   trở về trạng thái chưa xuất (đúng tinh thần EQR: tem trong phiếu bị hủy trở về tem trắng).
+    /// </summary>
+    public async Task<ShipCancelResult> CancelShipmentAsync(int id, string? reason, string cancelledBy)
+    {
+        var sh = await db.Shipments.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (sh == null) return new ShipCancelResult(false, "Không tìm thấy phiếu xuất.", 0, "", 0);
+        if (sh.Status == "CANCEL")
+            return new ShipCancelResult(false, $"Phiếu {sh.ShipmentNo} đã bị hủy trước đó.", sh.Id, sh.ShipmentNo, 0);
+        if (sh.Status != "SHIPPED")
+            return new ShipCancelResult(false, $"Phiếu {sh.ShipmentNo} đang ở trạng thái {sh.Status}, chỉ hủy được phiếu đã xuất (SHIPPED).", sh.Id, sh.ShipmentNo, 0);
+
+        var codes = sh.Lines.Select(l => l.QrId).ToList();
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+        {
+            s.ShipmentId = null;
+            s.ShippedAt = null;
+            s.CustomerCode = null;
+        }
+        sh.Status = "CANCEL";
+        sh.CancelledAt = now;
+        sh.CancelledBy = cancelledBy;
+        sh.CancelReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        await db.SaveChangesAsync();
+        return new ShipCancelResult(true, $"Đã hủy phiếu {sh.ShipmentNo}, giải phóng {stamps.Count} tem về trạng thái chưa xuất.", sh.Id, sh.ShipmentNo, stamps.Count);
     }
 
     // ── KÍCH HOẠT THÔNG TIN SẢN XUẤT (InvF_ProductionActive) ────────
