@@ -1,0 +1,46 @@
+@model List<TraceEvent>
+@{
+    ViewData["Title"] = "Sự kiện truy xuất GS1";
+    var cteCode = (string?)ViewBag.CteCode;
+    var types = (List<TraceEventType>)ViewBag.Types;
+}
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Sự kiện truy xuất nguồn gốc (GS1)</h6>
+        <div class="d-flex gap-2">
+            <a href="/Trace/Catalog" class="btn btn-sm btn-outline-primary"><i class="bi bi-list-ul me-1"></i>Danh mục CTE/KDE</a>
+            <a href="/Trace/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Ghi sự kiện</a>
+        </div>
+    </div>
+    <p class="text-muted small">Sự kiện truy xuất theo chuẩn GS1 (CTE/KDE) — Trồng, Thu hoạch, Đóng gói, Vận chuyển… Mỗi sự kiện gồm nhiều trường dữ liệu (KDE); sự kiện trùng bộ giá trị khóa sẽ được cập nhật thay vì tạo mới.</p>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <select name="cteCode" class="form-select form-select-sm">
+                <option value="">— Tất cả loại sự kiện —</option>
+                @foreach (var t in types)
+                {
+                    <option value="@t.Code" selected="@(t.Code == cteCode)">@t.Code — @t.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Lọc</button></div>
+    </form>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã sự kiện</th><th>Loại (CTE)</th><th>Kiểu hiển thị</th><th>GLN</th><th>Số trường</th><th>Tạo lúc</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@e.EventNo</td>
+                <td><span class="badge bg-secondary">@e.CteCode</span></td>
+                <td class="small">@e.UIStyleCode</td>
+                <td class="small text-muted">@(string.IsNullOrWhiteSpace(e.GLNOrgCode) ? "—" : e.GLNOrgCode)</td>
+                <td>@e.Specs.Count</td>
+                <td class="small text-muted">@e.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="text-end"><a href="/Trace/Detail/@e.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có sự kiện truy xuất nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

@@ -32,6 +32,9 @@ public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime Ex
 /// <summary>Kết quả thao tác danh mục nguồn gốc (nghiệp vụ Mst_NguonGoc).</summary>
 public record OriginResult(bool Ok, string Message, int Id, string Code);
 
+/// <summary>Kết quả lưu sự kiện truy xuất GS1 (nghiệp vụ Event_Event_Save).</summary>
+public record TraceEventResult(bool Ok, string Message, int Id, string EventNo, string Action);
+
 public interface IStampService
 {
     // admin
@@ -79,6 +82,14 @@ public interface IStampService
     Task<OriginResult> CreateOriginAsync(OriginCatalog o, string createdBy);
     Task<OriginResult> UpdateOriginAsync(int id, OriginCatalog o);
     Task<OriginResult> DeleteOriginAsync(int id);
+    // truy xuất nguồn gốc GS1 (Mst_CTE / Mst_KDE / CTE_KDE / Event_Event)
+    Task<List<TraceEventType>> TraceEventTypesAsync();
+    Task<TraceEventType?> GetTraceEventTypeAsync(int id);
+    Task<List<TraceKde>> TraceKdesAsync();
+    Task<List<TraceEvent>> TraceEventsAsync(string? cteCode);
+    Task<TraceEvent?> GetTraceEventAsync(int id);
+    Task<TraceEventResult> SaveTraceEventAsync(string? eventNo, string cteCode, string uiStyleCode, string? glnOrgCode,
+        string? remark, IEnumerable<(string KdeCode, string KdeValue)> specs, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -628,6 +639,124 @@ public class StampService(AppDbContext db) : IStampService
         var cert = string.Join(" ", new[] { o.CertificateCode, o.CertificateNo }
             .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         return string.IsNullOrWhiteSpace(cert) ? o.Code : $"{o.Code} ({cert})";
+    }
+
+    // ── TRUY XUẤT NGUỒN GỐC GS1 (Mst_CTE / Mst_KDE / CTE_KDE / Event_Event) ─
+    public Task<List<TraceEventType>> TraceEventTypesAsync() =>
+        db.TraceEventTypes.Include(x => x.Kdes).ThenInclude(k => k.TraceKde)
+            .OrderBy(x => x.Code).ToListAsync();
+
+    public Task<TraceEventType?> GetTraceEventTypeAsync(int id) =>
+        db.TraceEventTypes.Include(x => x.Kdes).ThenInclude(k => k.TraceKde)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    public Task<List<TraceKde>> TraceKdesAsync() =>
+        db.TraceKdes.OrderBy(x => x.Code).ToListAsync();
+
+    public Task<List<TraceEvent>> TraceEventsAsync(string? cteCode)
+    {
+        var query = db.TraceEvents.Include(x => x.Specs).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(cteCode)) query = query.Where(x => x.CteCode == cteCode);
+        return query.OrderByDescending(x => x.CreatedAt).Take(200).ToListAsync();
+    }
+
+    public Task<TraceEvent?> GetTraceEventAsync(int id) =>
+        db.TraceEvents.Include(x => x.Specs).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Lưu 1 sự kiện truy xuất GS1. Mô phỏng nghiệp vụ
+    /// WAS_Event_Event_Save_New20210922 của EQR:
+    /// - CTECode bắt buộc và phải tồn tại (đang hoạt động).
+    /// - UIStyleCode bắt buộc.
+    /// - Mọi KDE phải thuộc CTE (tồn tại cặp CTE_KDE) — nếu không ⇒ từ chối.
+    /// - Tối đa 1 KDE dạng danh sách (FlagList) cho mỗi sự kiện.
+    /// - Các KDE khóa (FlagKey) bắt buộc có giá trị và phải đủ số lượng khóa.
+    /// - Nếu đã có sự kiện cùng bộ giá trị khóa ⇒ cập nhật (UPDATE) thay vì tạo mới.
+    /// </summary>
+    public async Task<TraceEventResult> SaveTraceEventAsync(string? eventNo, string cteCode, string uiStyleCode,
+        string? glnOrgCode, string? remark, IEnumerable<(string KdeCode, string KdeValue)> specs, string createdBy)
+    {
+        cteCode = (cteCode ?? "").Trim();
+        uiStyleCode = (uiStyleCode ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(cteCode))
+            return new TraceEventResult(false, "Loại sự kiện (CTECode) không được để trống.", 0, "", "");
+        if (string.IsNullOrWhiteSpace(uiStyleCode))
+            return new TraceEventResult(false, "Kiểu hiển thị (UIStyleCode) không được để trống.", 0, "", "");
+
+        var cte = await db.TraceEventTypes.Include(x => x.Kdes).ThenInclude(k => k.TraceKde)
+            .FirstOrDefaultAsync(x => x.Code == cteCode && x.IsActive);
+        if (cte == null)
+            return new TraceEventResult(false, $"Loại sự kiện {cteCode} không tồn tại hoặc đã ngừng.", 0, "", "");
+
+        var rows = (specs ?? []).Select(s => (KdeCode: (s.KdeCode ?? "").Trim(), KdeValue: (s.KdeValue ?? "").Trim()))
+            .Where(s => s.KdeCode.Length > 0).ToList();
+        if (rows.Count == 0)
+            return new TraceEventResult(false, "Sự kiện phải có ít nhất 1 trường dữ liệu (KDE).", 0, "", "");
+
+        // mọi KDE phải thuộc CTE (CTECode_KDECodeNotFound)
+        var allowed = cte.Kdes.Select(k => k.TraceKde.Code).ToHashSet();
+        var bad = rows.Select(r => r.KdeCode).Where(c => !allowed.Contains(c)).Distinct().ToList();
+        if (bad.Count > 0)
+            return new TraceEventResult(false, $"Trường dữ liệu không thuộc loại sự kiện {cteCode}: {string.Join(", ", bad)}", 0, "", "");
+
+        // tối đa 1 KDE dạng danh sách (AllowOnlyOneListPerEvent)
+        var listCodes = cte.Kdes.Where(k => k.IsList).Select(k => k.TraceKde.Code).ToHashSet();
+        if (rows.Count(r => listCodes.Contains(r.KdeCode)) > 1)
+            return new TraceEventResult(false, "Mỗi sự kiện chỉ được có tối đa 1 trường dạng danh sách.", 0, "", "");
+
+        // KDE khóa bắt buộc có giá trị + phải đủ số lượng khóa
+        var keyCodes = cte.Kdes.Where(k => k.IsKey).Select(k => k.TraceKde.Code).ToList();
+        var emptyKey = rows.Where(r => keyCodes.Contains(r.KdeCode) && string.IsNullOrWhiteSpace(r.KdeValue))
+            .Select(r => r.KdeCode).ToList();
+        if (emptyKey.Count > 0)
+            return new TraceEventResult(false, $"Trường khóa bắt buộc có giá trị: {string.Join(", ", emptyKey)}", 0, "", "");
+        var inputKeyCount = rows.Count(r => keyCodes.Contains(r.KdeCode));
+        if (inputKeyCount != keyCodes.Count)
+            return new TraceEventResult(false, $"Sự kiện chưa đủ trường khóa: cần {keyCodes.Count}, có {inputKeyCount}.", 0, "", "");
+
+        // tìm sự kiện trùng theo bộ giá trị khóa (nếu có ⇒ UPDATE)
+        var keyValues = rows.Where(r => keyCodes.Contains(r.KdeCode)).ToDictionary(r => r.KdeCode, r => r.KdeValue);
+        TraceEvent? existing = null;
+        if (keyCodes.Count > 0)
+        {
+            var candidates = await db.TraceEvents.Include(x => x.Specs)
+                .Where(x => x.CteCode == cteCode).ToListAsync();
+            existing = candidates.FirstOrDefault(ev => keyCodes.All(kc =>
+                ev.Specs.Any(sp => sp.KdeCode == kc && sp.KdeValue == keyValues[kc])));
+        }
+
+        var now = DateTime.Now;
+        if (existing != null)
+        {
+            db.TraceEventSpecs.RemoveRange(existing.Specs);
+            existing.Specs.Clear();
+            foreach (var r in rows)
+                existing.Specs.Add(new TraceEventSpec { CteCode = cteCode, KdeCode = r.KdeCode, KdeValue = r.KdeValue });
+            existing.UIStyleCode = uiStyleCode;
+            existing.GLNOrgCode = glnOrgCode;
+            existing.Remark = remark;
+            existing.TplVECode = cte.TplVECode;
+            existing.TplVEDetail = cte.TplVEDetail;
+            existing.UpdatedAt = now;
+            await db.SaveChangesAsync();
+            return new TraceEventResult(true, $"Đã cập nhật sự kiện {existing.EventNo}.", existing.Id, existing.EventNo, "UPDATE");
+        }
+
+        if (string.IsNullOrWhiteSpace(eventNo)) eventNo = $"EV{DateTime.Now:yyMMddHHmmss}";
+        eventNo = eventNo.Trim();
+        if (await db.TraceEvents.AnyAsync(x => x.EventNo == eventNo))
+            return new TraceEventResult(false, $"Mã sự kiện {eventNo} đã tồn tại.", 0, "", "");
+
+        var ev = new TraceEvent
+        {
+            EventNo = eventNo, CteCode = cteCode, UIStyleCode = uiStyleCode, GLNOrgCode = glnOrgCode,
+            TplVECode = cte.TplVECode, TplVEDetail = cte.TplVEDetail, Remark = remark, CreatedBy = createdBy
+        };
+        foreach (var r in rows)
+            ev.Specs.Add(new TraceEventSpec { CteCode = cteCode, KdeCode = r.KdeCode, KdeValue = r.KdeValue });
+        db.TraceEvents.Add(ev);
+        await db.SaveChangesAsync();
+        return new TraceEventResult(true, $"Đã tạo sự kiện {ev.EventNo} ({rows.Count} trường dữ liệu).", ev.Id, ev.EventNo, "ADD");
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

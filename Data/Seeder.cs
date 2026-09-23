@@ -152,6 +152,51 @@ public static class Seeder
                     Address = "TP. Đà Lạt, Lâm Đồng", CreatedBy = "seed"
                 });
             await db.SaveChangesAsync();
+
+            // Danh mục truy xuất GS1 (Mst_CTE / Mst_KDE / CTE_KDE) — master data cho màn Sự kiện truy xuất
+            var cteHarvest = new TraceEventType { Code = "HARVEST", Name = "Thu hoạch", TplVECode = "TPL-HARVEST", TplVEDetail = "Mẫu hiển thị sự kiện thu hoạch", CreatedBy = "seed" };
+            var ctePack = new TraceEventType { Code = "PACKING", Name = "Đóng gói", TplVECode = "TPL-PACKING", TplVEDetail = "Mẫu hiển thị sự kiện đóng gói", CreatedBy = "seed" };
+            var cteShip = new TraceEventType { Code = "SHIPPING", Name = "Vận chuyển", TplVECode = "TPL-SHIPPING", TplVEDetail = "Mẫu hiển thị sự kiện vận chuyển", CreatedBy = "seed" };
+            db.TraceEventTypes.AddRange(cteHarvest, ctePack, cteShip);
+            await db.SaveChangesAsync();
+
+            var kdeLot = new TraceKde { Code = "LOTNO", Name = "Số lô", DataType = "TEXT", IsKey = true, CreatedBy = "seed" };
+            var kdeDate = new TraceKde { Code = "EVENTDATE", Name = "Ngày sự kiện", DataType = "DATE", IsKey = true, CreatedBy = "seed" };
+            var kdeTemp = new TraceKde { Code = "TEMPERATURE", Name = "Nhiệt độ", DataType = "NUMBER", CreatedBy = "seed" };
+            var kdeOperator = new TraceKde { Code = "OPERATOR", Name = "Người thực hiện", DataType = "TEXT", CreatedBy = "seed" };
+            var kdeQty = new TraceKde { Code = "QUANTITY", Name = "Khối lượng", DataType = "NUMBER", CreatedBy = "seed" };
+            var kdeItems = new TraceKde { Code = "ITEMLIST", Name = "Danh sách mặt hàng", DataType = "TEXT", IsList = true, CreatedBy = "seed" };
+            db.TraceKdes.AddRange(kdeLot, kdeDate, kdeTemp, kdeOperator, kdeQty, kdeItems);
+            await db.SaveChangesAsync();
+
+            // Gán KDE vào từng CTE (CTE_KDE)
+            db.TraceEventTypeKdes.AddRange(
+                new TraceEventTypeKde { TraceEventTypeId = cteHarvest.Id, TraceKdeId = kdeLot.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = cteHarvest.Id, TraceKdeId = kdeDate.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = cteHarvest.Id, TraceKdeId = kdeQty.Id },
+                new TraceEventTypeKde { TraceEventTypeId = cteHarvest.Id, TraceKdeId = kdeOperator.Id },
+                new TraceEventTypeKde { TraceEventTypeId = ctePack.Id, TraceKdeId = kdeLot.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = ctePack.Id, TraceKdeId = kdeDate.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = ctePack.Id, TraceKdeId = kdeItems.Id, IsList = true },
+                new TraceEventTypeKde { TraceEventTypeId = cteShip.Id, TraceKdeId = kdeLot.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = cteShip.Id, TraceKdeId = kdeDate.Id, IsKey = true },
+                new TraceEventTypeKde { TraceEventTypeId = cteShip.Id, TraceKdeId = kdeTemp.Id },
+                new TraceEventTypeKde { TraceEventTypeId = cteShip.Id, TraceKdeId = kdeOperator.Id });
+            await db.SaveChangesAsync();
+
+            // 1 sự kiện truy xuất mẫu (Event_Event) — thu hoạch lô L2026-001
+            var ev = new TraceEvent
+            {
+                EventNo = "EV-SEED-001", CteCode = "HARVEST", UIStyleCode = "DEFAULT",
+                GLNOrgCode = "8930000000001", TplVECode = "TPL-HARVEST", TplVEDetail = "Mẫu hiển thị sự kiện thu hoạch",
+                Remark = "Thu hoạch lô mẫu", CreatedBy = "seed"
+            };
+            ev.Specs.Add(new TraceEventSpec { CteCode = "HARVEST", KdeCode = "LOTNO", KdeValue = "L2026-001" });
+            ev.Specs.Add(new TraceEventSpec { CteCode = "HARVEST", KdeCode = "EVENTDATE", KdeValue = DateTime.Today.AddDays(-10).ToString("yyyy-MM-dd") });
+            ev.Specs.Add(new TraceEventSpec { CteCode = "HARVEST", KdeCode = "QUANTITY", KdeValue = "1000" });
+            ev.Specs.Add(new TraceEventSpec { CteCode = "HARVEST", KdeCode = "OPERATOR", KdeValue = "Nguyễn Văn A" });
+            db.TraceEvents.Add(ev);
+            await db.SaveChangesAsync();
         }
     }
 
@@ -159,7 +204,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

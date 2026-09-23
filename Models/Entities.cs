@@ -316,3 +316,98 @@ public class LotteryReward : IOrgOwned
     public int Stock { get; set; } = 100;
     public bool IsLose { get; set; }        // ô "Chúc bạn may mắn lần sau"
 }
+
+// ── Truy xuất nguồn gốc theo chuẩn GS1 (module eTEM TruyXuat) ────────
+// Mst_CTE (Critical Tracking Event) — loại sự kiện truy xuất: Trồng,
+// Thu hoạch, Đóng gói, Vận chuyển… Mỗi CTE gồm nhiều KDE (qua CTE_KDE).
+// Ràng buộc EQR: CTECode bắt buộc + duy nhất; phải gắn 1 template hiển thị
+// (TplVECode) để người tiêu dùng xem được sự kiện.
+public class TraceEventType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";        // CTECode — vd HARVEST
+    public string Name { get; set; } = "";        // CTEName — vd "Thu hoạch"
+    public string? TplVECode { get; set; }         // template hiển thị (Mst_TplViewEvent)
+    public string? TplVEDetail { get; set; }       // mô tả template
+    public bool IsActive { get; set; } = true;     // FlagActive
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<TraceEventTypeKde> Kdes { get; set; } = [];
+}
+
+// ── Mst_KDE (Key Data Element) — trường dữ liệu của 1 sự kiện ────────
+// vd: nhiệt độ, số lô, người thực hiện, khối lượng…
+// FlagKey = '1' ⇒ KDE này là "khóa" định danh sự kiện (dùng để gộp/khớp
+// sự kiện trùng). FlagList = '1' ⇒ KDE dạng danh sách (mỗi sự kiện chỉ
+// được có tối đa 1 KDE list — ràng buộc AllowOnlyOneListPerEvent của EQR).
+public class TraceKde : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";        // KDECode — vd TEMPERATURE
+    public string Name { get; set; } = "";        // KDEName — vd "Nhiệt độ"
+    public string? DataType { get; set; }          // kiểu dữ liệu — vd TEXT / NUMBER / DATE
+    public bool IsKey { get; set; }                // FlagKey — KDE khóa định danh sự kiện
+    public bool IsList { get; set; }               // FlagList — KDE dạng danh sách
+    public bool IsActive { get; set; } = true;     // FlagActive
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+// ── CTE_KDE — gán KDE nào thuộc CTE nào (bảng nối) ───────────────────
+// Ràng buộc EQR: mọi cặp (CTECode, KDECode) khi lưu sự kiện phải tồn tại
+// trong bảng nối này (CTECode_KDECodeNotFound).
+public class TraceEventTypeKde : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TraceEventTypeId { get; set; }
+    public int TraceKdeId { get; set; }
+    public bool IsKey { get; set; }                // FlagKey (bản sao theo CTE)
+    public bool IsList { get; set; }               // FlagList (bản sao theo CTE)
+
+    public TraceEventType TraceEventType { get; set; } = null!;
+    public TraceKde TraceKde { get; set; } = null!;
+}
+
+// ── Event_Event — sự kiện truy xuất THỰC TẾ gắn với tem/lô ───────────
+// Nghiệp vụ EQR (WAS_Event_Event_Save_New20210922): 1 sự kiện = header
+// (CTECode, UIStyleCode, GLNOrgCode, Remark) + N dòng KDE (Event_EventSpec).
+// Ràng buộc: CTECode + UIStyleCode bắt buộc; mọi KDE phải thuộc CTE;
+// tối đa 1 KDE list; các KDE khóa (FlagKey) bắt buộc có giá trị và phải
+// đủ số lượng khóa; sự kiện trùng khóa ⇒ cập nhật (UPDATE) thay vì tạo mới.
+public class TraceEvent : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string EventNo { get; set; } = "";      // mã sự kiện (duy nhất trong tenant)
+    public string CteCode { get; set; } = "";      // loại sự kiện
+    public string UIStyleCode { get; set; } = "";  // kiểu hiển thị
+    public string? GLNOrgCode { get; set; }        // mã địa điểm GS1
+    public string? TplVECode { get; set; }         // template hiển thị (suy ra từ CTE)
+    public string? TplVEDetail { get; set; }
+    public string Status { get; set; } = "ACTIVE"; // EventStatus
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+
+    public List<TraceEventSpec> Specs { get; set; } = [];
+}
+
+// ── Event_EventSpec — 1 dòng KDE của sự kiện (KDECode + KDEValue) ────
+public class TraceEventSpec : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TraceEventId { get; set; }
+    public string CteCode { get; set; } = "";
+    public string KdeCode { get; set; } = "";
+    public string KdeValue { get; set; } = "";
+
+    public TraceEvent TraceEvent { get; set; } = null!;
+}

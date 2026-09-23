@@ -355,3 +355,51 @@ public class OriginController(IStampService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Truy xuất nguồn gốc GS1 (nghiệp vụ Mst_CTE / Mst_KDE / CTE_KDE / Event_Event của EQR)
+public class TraceController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? cteCode)
+    {
+        ViewBag.CteCode = cteCode;
+        ViewBag.Types = await svc.TraceEventTypesAsync();
+        return View(await svc.TraceEventsAsync(cteCode));
+    }
+
+    // Danh mục loại sự kiện (Mst_CTE) + trường dữ liệu (Mst_KDE)
+    public async Task<IActionResult> Catalog()
+    {
+        ViewBag.Kdes = await svc.TraceKdesAsync();
+        return View(await svc.TraceEventTypesAsync());
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Types = await svc.TraceEventTypesAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? eventNo, string? cteCode, string? uiStyleCode, string? glnOrgCode,
+        string? remark, string[]? kdeCode, string[]? kdeValue)
+    {
+        var specs = new List<(string, string)>();
+        if (kdeCode != null)
+            for (int i = 0; i < kdeCode.Length; i++)
+            {
+                var v = (kdeValue != null && i < kdeValue.Length) ? kdeValue[i] : "";
+                if (!string.IsNullOrWhiteSpace(kdeCode[i])) specs.Add((kdeCode[i], v ?? ""));
+            }
+        var r = await svc.SaveTraceEventAsync(eventNo, cteCode ?? "", uiStyleCode ?? "", glnOrgCode, remark, specs, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Types = await svc.TraceEventTypesAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var ev = await svc.GetTraceEventAsync(id);
+        if (ev == null) return NotFound();
+        return View(ev);
+    }
+}

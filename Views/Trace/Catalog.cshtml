@@ -1,0 +1,57 @@
+@model List<TraceEventType>
+@{
+    ViewData["Title"] = "Danh mục CTE / KDE";
+    var kdes = (List<TraceKde>)ViewBag.Kdes;
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Danh mục loại sự kiện (Mst_CTE)</h6>
+        <a href="/Trace" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-left me-1"></i>Về danh sách sự kiện</a>
+    </div>
+    <p class="text-muted small">Mỗi loại sự kiện (CTE) gồm nhiều trường dữ liệu (KDE). Trường <b>khóa</b> dùng để định danh/gộp sự kiện trùng; trường <b>danh sách</b> mỗi sự kiện chỉ được có tối đa 1.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã CTE</th><th>Tên</th><th>Template hiển thị</th><th>Trường dữ liệu (KDE)</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+        @foreach (var t in Model)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@t.Code</td>
+                <td>@t.Name</td>
+                <td class="small text-muted">@(string.IsNullOrWhiteSpace(t.TplVECode) ? "—" : t.TplVECode)</td>
+                <td>
+                    @foreach (var k in t.Kdes)
+                    {
+                        <span class="badge bg-light text-dark border me-1 mb-1">
+                            @k.TraceKde.Code
+                            @if (k.IsKey) { <i class="bi bi-key-fill text-warning" title="Trường khóa"></i> }
+                            @if (k.IsList) { <i class="bi bi-list-ul text-info" title="Trường danh sách"></i> }
+                        </span>
+                    }
+                </td>
+                <td>@if (t.IsActive) { <span class="badge bg-success">Hoạt động</span> } else { <span class="badge bg-secondary">Ngừng</span> }</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có loại sự kiện nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Danh mục trường dữ liệu (Mst_KDE)</h6>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã KDE</th><th>Tên</th><th>Kiểu dữ liệu</th><th>Khóa</th><th>Danh sách</th></tr></thead>
+        <tbody>
+        @foreach (var k in kdes)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@k.Code</td>
+                <td>@k.Name</td>
+                <td class="small text-muted">@(string.IsNullOrWhiteSpace(k.DataType) ? "—" : k.DataType)</td>
+                <td>@if (k.IsKey) { <i class="bi bi-key-fill text-warning"></i> } else { <text>—</text> }</td>
+                <td>@if (k.IsList) { <i class="bi bi-list-ul text-info"></i> } else { <text>—</text> }</td>
+            </tr>
+        }
+        @if (kdes.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có trường dữ liệu nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

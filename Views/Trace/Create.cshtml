@@ -1,0 +1,61 @@
+@{
+    ViewData["Title"] = "Ghi sự kiện truy xuất";
+    var types = (List<TraceEventType>)ViewBag.Types;
+}
+<div class="card" style="max-width:900px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã sự kiện</label><input name="eventNo" class="form-control" placeholder="Để trống = tự sinh" /></div>
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Loại sự kiện (CTE) <span class="text-danger">*</span></label>
+                <select name="cteCode" id="cteCode" class="form-select" onchange="renderKdes()">
+                    <option value="">— Chọn loại sự kiện —</option>
+                    @foreach (var t in types)
+                    {
+                        <option value="@t.Code">@t.Code — @t.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4"><label class="form-label small text-muted">Kiểu hiển thị (UIStyleCode) <span class="text-danger">*</span></label><input name="uiStyleCode" value="DEFAULT" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã địa điểm GS1 (GLN)</label><input name="glnOrgCode" class="form-control" placeholder="VD: 8930000000001" /></div>
+            <div class="col-md-8"><label class="form-label small text-muted">Ghi chú</label><input name="remark" class="form-control" /></div>
+        </div>
+
+        <hr />
+        <h6 class="fw-bold mb-2">Trường dữ liệu (KDE)</h6>
+        <p class="text-muted small mb-2">Chọn loại sự kiện để hiện các trường tương ứng. Trường có <i class="bi bi-key-fill text-warning"></i> là khóa (bắt buộc có giá trị).</p>
+        <div id="kdeRows" class="mb-2"></div>
+
+        <div class="alert alert-light border small mb-3"><i class="bi bi-info-circle me-1"></i>Nếu đã có sự kiện cùng loại với cùng bộ giá trị khóa, hệ thống sẽ <b>cập nhật</b> sự kiện đó thay vì tạo mới (đúng nghiệp vụ EQR).</div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Lưu sự kiện</button> <a href="/Trace" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>
+
+@section Scripts {
+<script>
+    var cteMap = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        types.ToDictionary(t => t.Code, t => t.Kdes.Select(k => new { code = k.TraceKde.Code, name = k.TraceKde.Name, isKey = k.IsKey, isList = k.IsList }).ToList())));
+    function renderKdes() {
+        var code = document.getElementById('cteCode').value;
+        var box = document.getElementById('kdeRows');
+        box.innerHTML = '';
+        var list = cteMap[code] || [];
+        if (list.length === 0) { box.innerHTML = '<div class="text-muted small">Chọn loại sự kiện để hiện trường dữ liệu.</div>'; return; }
+        list.forEach(function (k) {
+            var div = document.createElement('div');
+            div.className = 'row g-2 mb-2 align-items-center';
+            div.innerHTML =
+                '<div class="col-md-4"><label class="form-label small mb-0">' + k.name +
+                (k.isKey ? ' <i class="bi bi-key-fill text-warning" title="Trường khóa"></i>' : '') +
+                (k.isList ? ' <i class="bi bi-list-ul text-info" title="Trường danh sách"></i>' : '') +
+                '</label><div class="text-muted" style="font-family:monospace;font-size:11px">' + k.code + '</div></div>' +
+                '<div class="col-md-8"><input name="kdeValue" class="form-control form-control-sm" placeholder="Giá trị…" />' +
+                '<input type="hidden" name="kdeCode" value="' + k.code + '" /></div>';
+            box.appendChild(div);
+        });
+    }
+</script>
+}

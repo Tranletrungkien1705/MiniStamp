@@ -27,6 +27,11 @@ public class AppDbContext : DbContext
     public DbSet<ProductLife> ProductLives => Set<ProductLife>();
     public DbSet<ProductionActive> ProductionActives => Set<ProductionActive>();
     public DbSet<OriginCatalog> OriginCatalogs => Set<OriginCatalog>();
+    public DbSet<TraceEventType> TraceEventTypes => Set<TraceEventType>();
+    public DbSet<TraceKde> TraceKdes => Set<TraceKde>();
+    public DbSet<TraceEventTypeKde> TraceEventTypeKdes => Set<TraceEventTypeKde>();
+    public DbSet<TraceEvent> TraceEvents => Set<TraceEvent>();
+    public DbSet<TraceEventSpec> TraceEventSpecs => Set<TraceEventSpec>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -117,6 +122,33 @@ public class AppDbContext : DbContext
         b.Entity<OriginCatalog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // NguonGocCode duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TraceEventType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // CTECode duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TraceKde>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // KDECode duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TraceEventTypeKde>(e =>
+        {
+            e.HasIndex(x => new { x.TraceEventTypeId, x.TraceKdeId }).IsUnique();
+            e.HasOne(x => x.TraceEventType).WithMany(x => x.Kdes).HasForeignKey(x => x.TraceEventTypeId);
+            e.HasOne(x => x.TraceKde).WithMany().HasForeignKey(x => x.TraceKdeId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TraceEvent>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.EventNo }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TraceEventSpec>(e =>
+        {
+            e.HasOne(x => x.TraceEvent).WithMany(x => x.Specs).HasForeignKey(x => x.TraceEventId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);
