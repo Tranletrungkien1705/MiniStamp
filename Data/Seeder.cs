@@ -134,6 +134,24 @@ public static class Seeder
                 });
                 await db.SaveChangesAsync();
             }
+
+            // Danh mục nguồn gốc mẫu (Mst_NguonGoc) — dùng cho trường Origin ở màn Kích hoạt SX
+            db.OriginCatalogs.AddRange(
+                new OriginCatalog
+                {
+                    Code = "CP1", Name = "Trang trại VietGAP 1030", DisplayName = "CP1 (VietGAP 1030)",
+                    CertificateCode = "VietGAP", CertificateNo = "1030", CertificateName = "Chứng nhận VietGAP số 1030",
+                    CertificateDateStart = DateTime.Today.AddYears(-1), CertificateDateEnd = DateTime.Today.AddYears(1),
+                    Address = "Xã Phú Hộ, TX. Phú Thọ", GlnCode = "8930000000001", CreatedBy = "seed"
+                },
+                new OriginCatalog
+                {
+                    Code = "CP2", Name = "Hợp tác xã Rau an toàn Đà Lạt", DisplayName = "CP2 (GlobalGAP 2024)",
+                    CertificateCode = "GlobalGAP", CertificateNo = "2024", CertificateName = "Chứng nhận GlobalGAP số 2024",
+                    CertificateDateStart = DateTime.Today.AddMonths(-6), CertificateDateEnd = DateTime.Today.AddMonths(18),
+                    Address = "TP. Đà Lạt, Lâm Đồng", CreatedBy = "seed"
+                });
+            await db.SaveChangesAsync();
         }
     }
 
@@ -141,7 +159,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

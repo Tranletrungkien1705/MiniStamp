@@ -1,0 +1,30 @@
+@model OriginCatalog
+@{ ViewData["Title"] = "Thêm nguồn gốc"; }
+<div class="card" style="max-width:860px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã nguồn gốc <span class="text-danger">*</span></label><input name="code" value="@Model?.Code" class="form-control" placeholder="VD: CP1" /></div>
+            <div class="col-md-8"><label class="form-label small text-muted">Tên nguồn gốc <span class="text-danger">*</span></label><input name="name" value="@Model?.Name" class="form-control" placeholder="VD: Trang trại VietGAP 1030" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Loại chứng chỉ</label><input name="certificateCode" value="@Model?.CertificateCode" class="form-control" placeholder="VD: VietGAP" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Số chứng chỉ</label><input name="certificateNo" value="@Model?.CertificateNo" class="form-control" placeholder="VD: 1030" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Tên đầy đủ chứng chỉ</label><input name="certificateName" value="@Model?.CertificateName" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Hiệu lực từ</label><input name="certificateDateStart" type="date" value="@Model?.CertificateDateStart?.ToString("yyyy-MM-dd")" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Hiệu lực đến</label><input name="certificateDateEnd" type="date" value="@Model?.CertificateDateEnd?.ToString("yyyy-MM-dd")" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Mã địa điểm GS1 (GLN)</label><input name="glnCode" value="@Model?.GlnCode" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-8"><label class="form-label small text-muted">Địa chỉ trang trại</label><input name="address" value="@Model?.Address" class="form-control" /></div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="isActive" value="true" checked /><label class="form-check-label small">Đang hoạt động</label></div>
+            </div>
+        </div>
+        <div class="mb-2"><label class="form-label small text-muted">Ghi chú</label><input name="remark" value="@Model?.Remark" class="form-control" /></div>
+        <div class="alert alert-light border small mb-3"><i class="bi bi-info-circle me-1"></i>Chuỗi gợi ý (DisplayName) sẽ được dựng tự động = "Mã (Loại chứng chỉ Số chứng chỉ)".</div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Lưu</button> <a href="/Origin" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

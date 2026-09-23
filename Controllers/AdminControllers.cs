@@ -294,3 +294,64 @@ public class ProductionActiveController(IStampService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Danh mục Nguồn gốc (nghiệp vụ Mst_NguonGoc của EQR)
+public class OriginController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q)
+    {
+        ViewBag.Q = q;
+        return View(await svc.OriginsAsync(q));
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? code, string? name, string? certificateCode, string? certificateNo,
+        string? certificateName, DateTime? certificateDateStart, DateTime? certificateDateEnd,
+        string? address, string? glnCode, string? remark, bool isActive)
+    {
+        var o = new OriginCatalog
+        {
+            Code = code ?? "", Name = name ?? "", CertificateCode = certificateCode, CertificateNo = certificateNo,
+            CertificateName = certificateName, CertificateDateStart = certificateDateStart, CertificateDateEnd = certificateDateEnd,
+            Address = address, GlnCode = glnCode, Remark = remark, IsActive = isActive
+        };
+        var r = await svc.CreateOriginAsync(o, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View(o);
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var o = await svc.GetOriginAsync(id);
+        if (o == null) return NotFound();
+        return View(o);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, string? name, string? certificateCode, string? certificateNo,
+        string? certificateName, DateTime? certificateDateStart, DateTime? certificateDateEnd,
+        string? address, string? glnCode, string? remark, bool isActive)
+    {
+        var o = new OriginCatalog
+        {
+            Name = name ?? "", CertificateCode = certificateCode, CertificateNo = certificateNo,
+            CertificateName = certificateName, CertificateDateStart = certificateDateStart, CertificateDateEnd = certificateDateEnd,
+            Address = address, GlnCode = glnCode, Remark = remark, IsActive = isActive
+        };
+        var r = await svc.UpdateOriginAsync(id, o);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { o.Id = id; o.Code = r.Code; return View(o); }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var r = await svc.DeleteOriginAsync(id);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}

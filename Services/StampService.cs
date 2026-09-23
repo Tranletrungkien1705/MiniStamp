@@ -29,6 +29,9 @@ public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int
 /// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
 public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
 
+/// <summary>Kết quả thao tác danh mục nguồn gốc (nghiệp vụ Mst_NguonGoc).</summary>
+public record OriginResult(bool Ok, string Message, int Id, string Code);
+
 public interface IStampService
 {
     // admin
@@ -70,6 +73,12 @@ public interface IStampService
     Task<PaResult> CreateProductionActiveAsync(string paNo, string refNo, string origin, int productId,
         int qtyPlan, DateTime productDate, int productLifeId, string listSerialIn, string listSerialOut, string createdBy);
     Task<PaResult> DeleteProductionActiveAsync(int id);
+    // danh mục nguồn gốc (Mst_NguonGoc)
+    Task<List<OriginCatalog>> OriginsAsync(string? q);
+    Task<OriginCatalog?> GetOriginAsync(int id);
+    Task<OriginResult> CreateOriginAsync(OriginCatalog o, string createdBy);
+    Task<OriginResult> UpdateOriginAsync(int id, OriginCatalog o);
+    Task<OriginResult> DeleteOriginAsync(int id);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -517,6 +526,108 @@ public class StampService(AppDbContext db) : IStampService
         db.ProductionActives.Remove(pa);
         await db.SaveChangesAsync();
         return new PaResult(true, $"Đã xóa phiếu kích hoạt {pa.PaNo}.", 0, pa.PaNo, pa.ExpiryDate);
+    }
+
+    // ── DANH MỤC NGUỒN GỐC (Mst_NguonGoc) ───────────────────────────
+    /// <summary>
+    /// Danh sách nguồn gốc. Nếu có từ khóa q → lọc theo Code/Name/DisplayName
+    /// (phục vụ Auto Complete, giống Ft_WhereClause của EQR).
+    /// </summary>
+    public async Task<List<OriginCatalog>> OriginsAsync(string? q)
+    {
+        var query = db.OriginCatalogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var k = q.Trim();
+            query = query.Where(x => x.Code.Contains(k) || x.Name.Contains(k) || x.DisplayName.Contains(k));
+        }
+        return await query.OrderBy(x => x.Code).Take(200).ToListAsync();
+    }
+
+    public Task<OriginCatalog?> GetOriginAsync(int id) =>
+        db.OriginCatalogs.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo 1 nguồn gốc. Mô phỏng nghiệp vụ Mst_NguonGoc_Create của EQR:
+    /// - Code bắt buộc và không được trùng.
+    /// - Name bắt buộc.
+    /// - CertificateDateStart <= CertificateDateEnd.
+    /// - DisplayName do server tự dựng = "&lt;Code&gt; (&lt;CertCode&gt; &lt;CertNo&gt;)" (rỗng chứng chỉ ⇒ = Code).
+    /// </summary>
+    public async Task<OriginResult> CreateOriginAsync(OriginCatalog o, string createdBy)
+    {
+        o.Code = (o.Code ?? "").Trim();
+        o.Name = (o.Name ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(o.Code)) return new OriginResult(false, "Mã nguồn gốc không được để trống.", 0, "");
+        if (string.IsNullOrWhiteSpace(o.Name)) return new OriginResult(false, "Tên nguồn gốc không được để trống.", 0, "");
+        if (o.CertificateDateStart != null && o.CertificateDateEnd != null && o.CertificateDateStart > o.CertificateDateEnd)
+            return new OriginResult(false, "Ngày bắt đầu chứng chỉ phải nhỏ hơn hoặc bằng ngày kết thúc.", 0, "");
+        if (await db.OriginCatalogs.AnyAsync(x => x.Code == o.Code))
+            return new OriginResult(false, $"Mã nguồn gốc {o.Code} đã tồn tại.", 0, "");
+
+        o.DisplayName = BuildDisplayName(o);
+        o.CreatedBy = createdBy;
+        db.OriginCatalogs.Add(o);
+        await db.SaveChangesAsync();
+        return new OriginResult(true, $"Đã tạo nguồn gốc {o.Code}.", o.Id, o.Code);
+    }
+
+    /// <summary>
+    /// Cập nhật 1 nguồn gốc. Mô phỏng nghiệp vụ Mst_NguonGoc_Update của EQR:
+    /// - Bản ghi phải tồn tại; Name không rỗng.
+    /// - Kiểm tra khoảng ngày chứng chỉ.
+    /// - Tự dựng lại DisplayName để chuỗi gợi ý không lệch dữ liệu.
+    /// </summary>
+    public async Task<OriginResult> UpdateOriginAsync(int id, OriginCatalog o)
+    {
+        var cur = await db.OriginCatalogs.FirstOrDefaultAsync(x => x.Id == id);
+        if (cur == null) return new OriginResult(false, "Không tìm thấy nguồn gốc.", 0, "");
+
+        o.Name = (o.Name ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(o.Name)) return new OriginResult(false, "Tên nguồn gốc không được để trống.", cur.Id, cur.Code);
+        if (o.CertificateDateStart != null && o.CertificateDateEnd != null && o.CertificateDateStart > o.CertificateDateEnd)
+            return new OriginResult(false, "Ngày bắt đầu chứng chỉ phải nhỏ hơn hoặc bằng ngày kết thúc.", cur.Id, cur.Code);
+
+        cur.Name = o.Name;
+        cur.CertificateCode = o.CertificateCode;
+        cur.CertificateNo = o.CertificateNo;
+        cur.CertificateName = o.CertificateName;
+        cur.CertificateDateStart = o.CertificateDateStart;
+        cur.CertificateDateEnd = o.CertificateDateEnd;
+        cur.Address = o.Address;
+        cur.GlnCode = o.GlnCode;
+        cur.Remark = o.Remark;
+        cur.IsActive = o.IsActive;
+        cur.DisplayName = BuildDisplayName(cur);
+        await db.SaveChangesAsync();
+        return new OriginResult(true, $"Đã cập nhật nguồn gốc {cur.Code}.", cur.Id, cur.Code);
+    }
+
+    /// <summary>
+    /// Xóa 1 nguồn gốc. Mô phỏng nghiệp vụ Mst_NguonGoc_Delete của EQR:
+    /// - Bản ghi phải tồn tại.
+    /// - CHẶN xóa nếu đã được dùng: có phiếu kích hoạt SX với Origin = Code.
+    /// </summary>
+    public async Task<OriginResult> DeleteOriginAsync(int id)
+    {
+        var cur = await db.OriginCatalogs.FirstOrDefaultAsync(x => x.Id == id);
+        if (cur == null) return new OriginResult(false, "Không tìm thấy nguồn gốc.", 0, "");
+
+        var inUse = await db.ProductionActives.AnyAsync(x => x.Origin == cur.Code);
+        if (inUse)
+            return new OriginResult(false, $"Nguồn gốc {cur.Code} đang được dùng ở phiếu kích hoạt SX, không thể xóa.", cur.Id, cur.Code);
+
+        db.OriginCatalogs.Remove(cur);
+        await db.SaveChangesAsync();
+        return new OriginResult(true, $"Đã xóa nguồn gốc {cur.Code}.", 0, cur.Code);
+    }
+
+    /// <summary>Dựng chuỗi gợi ý: "&lt;Code&gt; (&lt;CertCode&gt; &lt;CertNo&gt;)"; rỗng chứng chỉ ⇒ = Code.</summary>
+    private static string BuildDisplayName(OriginCatalog o)
+    {
+        var cert = string.Join(" ", new[] { o.CertificateCode, o.CertificateNo }
+            .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+        return string.IsNullOrWhiteSpace(cert) ? o.Code : $"{o.Code} ({cert})";
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

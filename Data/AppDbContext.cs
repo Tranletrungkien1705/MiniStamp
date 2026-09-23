@@ -26,6 +26,7 @@ public class AppDbContext : DbContext
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
     public DbSet<ProductLife> ProductLives => Set<ProductLife>();
     public DbSet<ProductionActive> ProductionActives => Set<ProductionActive>();
+    public DbSet<OriginCatalog> OriginCatalogs => Set<OriginCatalog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -111,6 +112,11 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.RefNo }).IsUnique();   // RefNo duy nhất trong tenant
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasOne(x => x.ProductLife).WithMany().HasForeignKey(x => x.ProductLifeId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<OriginCatalog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // NguonGocCode duy nhất trong tenant
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

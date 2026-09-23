@@ -268,6 +268,33 @@ public class ProductionActive : IOrgOwned
     public ProductLife ProductLife { get; set; } = null!;
 }
 
+// ── Danh mục Nguồn gốc (Mst_NguonGoc) — master data ──────────────────
+// Nghiệp vụ EQR: danh mục nguồn gốc (trang trại/vùng trồng) dùng cho trường
+// "Nguồn gốc" ở màn Kích hoạt thông tin sản xuất, kèm thông tin chứng chỉ
+// (VietGAP/GlobalGAP…) và hỗ trợ Auto Complete.
+// Ràng buộc: Code bắt buộc + duy nhất; Name bắt buộc; DateStart <= DateEnd;
+// DisplayName do server tự dựng = "<Code> (<CertCode> <CertNo>)" (rỗng chứng chỉ ⇒ = Code);
+// chặn xóa nếu đã được dùng làm Origin của 1 phiếu kích hoạt SX.
+public class OriginCatalog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";            // NguonGocCode — vd CP1
+    public string Name { get; set; } = "";            // NguonGocName — tên trang trại
+    public string DisplayName { get; set; } = "";     // chuỗi gợi ý (server tự dựng)
+    public string? CertificateCode { get; set; }       // loại chứng chỉ — vd VietGAP
+    public string? CertificateNo { get; set; }         // số chứng chỉ — vd 1030
+    public string? CertificateName { get; set; }       // tên đầy đủ chứng chỉ
+    public DateTime? CertificateDateStart { get; set; }
+    public DateTime? CertificateDateEnd { get; set; }
+    public string? Address { get; set; }               // địa chỉ trang trại
+    public string? GlnCode { get; set; }               // GLNCode — mã địa điểm GS1
+    public string? Remark { get; set; }
+    public bool IsActive { get; set; } = true;         // FlagActive
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {

@@ -1,0 +1,43 @@
+@model List<OriginCatalog>
+@{ ViewData["Title"] = "Danh mục Nguồn gốc"; var q = (string?)ViewBag.Q; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Danh mục Nguồn gốc</h6>
+        <a href="/Origin/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm nguồn gốc</a>
+    </div>
+    <p class="text-muted small">Danh mục nguồn gốc (trang trại/vùng trồng) kèm thông tin chứng chỉ — dùng cho trường "Nguồn gốc" ở màn Kích hoạt SX. Chuỗi gợi ý (DisplayName) do hệ thống tự dựng.</p>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4"><input name="q" value="@q" class="form-control form-control-sm" placeholder="Tìm theo mã / tên / chuỗi gợi ý…" /></div>
+        <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Tìm</button></div>
+    </form>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã</th><th>Tên nguồn gốc</th><th>Chuỗi gợi ý</th><th>Chứng chỉ</th><th>Hiệu lực</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var o in Model)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@o.Code</td>
+                <td>@o.Name</td>
+                <td class="small text-muted">@o.DisplayName</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(o.CertificateName) ? (string.IsNullOrWhiteSpace(o.CertificateCode) ? "—" : o.CertificateCode) : o.CertificateName)</td>
+                <td class="small text-muted">
+                    @if (o.CertificateDateStart != null || o.CertificateDateEnd != null)
+                    {
+                        @($"{o.CertificateDateStart:dd/MM/yyyy} → {o.CertificateDateEnd:dd/MM/yyyy}")
+                    }
+                    else { <text>—</text> }
+                </td>
+                <td>@if (o.IsActive) { <span class="badge bg-success">Hoạt động</span> } else { <span class="badge bg-secondary">Ngừng</span> }</td>
+                <td class="text-end">
+                    <a href="/Origin/Edit/@o.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                    <form asp-action="Delete" asp-route-id="@o.Id" method="post" class="d-inline" onsubmit="return confirm('Xóa nguồn gốc @o.Code?');">
+                        @Html.AntiForgeryToken()
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có nguồn gốc nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
