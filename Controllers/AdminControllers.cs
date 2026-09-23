@@ -101,6 +101,24 @@ public class BoxController(IStampService svc) : Controller
         if (b == null) return NotFound();
         return View(b);
     }
+
+    // Gộp tem vào 1 hộp mới (nghiệp vụ Map_IDInBox_Merge của EQR)
+    public async Task<IActionResult> Merge()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Merge(int productId, string? boxNo, string? codes)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        var r = await svc.MergeBoxAsync(boxNo ?? "", productId, list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.BoxId });
+    }
 }
 
 // Khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo của EQR)

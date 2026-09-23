@@ -108,6 +108,25 @@ public static class Seeder
             db.BoxHistories.Add(hist);
             await db.SaveChangesAsync();
 
+            // 1 bản ghi lịch sử GỘP HỘP mẫu (Map_IDInBox_Merge) — gộp 2 tem cuối lô vào 1 hộp mới
+            var boxMergeStamps = batch.Stamps.Skip(26).Take(2).ToList();
+            if (boxMergeStamps.Count > 0)
+            {
+                var mergeBox = new Box { BoxNo = "BOX-MERGE-001", ProductId = p1.Id, CreatedBy = "seed" };
+                db.Boxes.Add(mergeBox);
+                await db.SaveChangesAsync();
+                foreach (var s in boxMergeStamps) { s.BoxId = mergeBox.Id; s.BoxedAt = DateTime.Now; }
+                mergeBox.Quantity = boxMergeStamps.Count;
+                var mergeHist = new BoxHistory
+                {
+                    BoxNo = mergeBox.BoxNo, FunctionName = "MAP_IDINBOX_MERGEX", RefType = "MERGE",
+                    CreateDTimeUTC = DateTime.Now, QtyIDNo = boxMergeStamps.Count, CreatedBy = "seed"
+                };
+                foreach (var s in boxMergeStamps) mergeHist.Lines.Add(new BoxHistoryLine { QrId = s.QrId });
+                db.BoxHistories.Add(mergeHist);
+                await db.SaveChangesAsync();
+            }
+
             // 1 cặp tem mẫu (Map_StampPair) — ghép 2 tem đầu của lô thành 1 cặp 1:1
             var pairTwo = batch.Stamps.Take(2).ToList();
             if (pairTwo.Count == 2)

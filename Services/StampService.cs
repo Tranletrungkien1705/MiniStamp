@@ -23,6 +23,9 @@ public record AssignCanResult(bool Ok, string Message, int CartonId, string CanN
 /// <summary>Kết quả khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo).</summary>
 public record RestoreResult(bool Ok, string Message, int BoxHistoryId, string BoxNo, int Restored, int Flagged);
 
+/// <summary>Kết quả gộp tem vào 1 hộp mới (nghiệp vụ Map_IDInBox_Merge).</summary>
+public record MergeBoxResult(bool Ok, string Message, int BoxId, string BoxNo, int Merged);
+
 /// <summary>Kết quả ghi nhận phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp).</summary>
 public record BrokenResult(bool Ok, string Message, int BrokenStampId, string BsNo, int Count);
 
@@ -132,6 +135,8 @@ public interface IStampService
     Task<List<BoxHistory>> BoxHistoriesAsync(string? boxNo);
     Task<BoxHistory?> GetBoxHistoryAsync(int id);
     Task<RestoreResult> RestoreBoxAsync(int boxHistoryId, string createdBy);
+    // gộp tem vào 1 hộp mới (Map_IDInBox_Merge)
+    Task<MergeBoxResult> MergeBoxAsync(string boxNo, int productId, IEnumerable<string> qrIds, string createdBy);
     // ghép cặp tem (Map_StampPair)
     Task<List<StampPair>> StampPairsAsync();
     Task<StampPair?> GetStampPairAsync(int id);
@@ -462,6 +467,75 @@ public class StampService(AppDbContext db) : IStampService
         return new RestoreResult(true,
             $"Đã khôi phục {restored} tem vào hộp {box.BoxNo}; {flagged.Count} tem nghi vấn đưa vào bảng trung tính.",
             hist.Id, box.BoxNo, restored, flagged.Count);
+    }
+
+    // ── GỘP TEM VÀO 1 HỘP MỚI (Map_IDInBox_Merge) ───────────────────
+    /// <summary>
+    /// Gộp 1 danh sách tem (IDNo) vào 1 hộp MỚI. Mô phỏng nghiệp vụ
+    /// WAS_Map_IDInBox_Merge_New20231222 → Map_IDInBox_MergeX_New20231222
+    /// (file InvGen.cs) của EQR: EQR sinh 1 BoxNo mới rồi gỡ các tem khỏi
+    /// hộp cũ (delete Map_IDInBox theo IDNo) và gắn tất cả vào hộp mới.
+    /// Ràng buộc EQR:
+    ///  - Danh sách tem không được rỗng.
+    ///  - Mọi IDNo phải tồn tại trong kho sinh số (IDNoNotExistInInvGen).
+    ///  - Tem đang thuộc hộp KHÁC hộp đích → gỡ khỏi hộp cũ rồi gộp vào hộp mới
+    ///    (đúng tinh thần "Clear Map_IDInBox" của EQR).
+    ///  - Ghi 1 bản ghi lịch sử (Map_IDInBoxHist, RefType=MERGE) để truy vết.
+    /// </summary>
+    public async Task<MergeBoxResult> MergeBoxAsync(string boxNo, int productId, IEnumerable<string> qrIds, string createdBy)
+    {
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new MergeBoxResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Include(s => s.Box)
+            .Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new MergeBoxResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(boxNo)) boxNo = $"BOX{DateTime.Now:yyMMddHHmmss}";
+        boxNo = boxNo.Trim().ToUpperInvariant();
+
+        var box = await db.Boxes.FirstOrDefaultAsync(b => b.BoxNo == boxNo);
+        if (box == null)
+        {
+            box = new Box { BoxNo = boxNo, ProductId = productId, CreatedBy = createdBy };
+            db.Boxes.Add(box);
+            await db.SaveChangesAsync();
+        }
+
+        // trùng: tất cả tem đã nằm trong đúng hộp này và số lượng khớp
+        var alreadyInBox = stamps.Count(s => s.BoxId == box.Id);
+        if (alreadyInBox == stamps.Count && box.Quantity == stamps.Count)
+            return new MergeBoxResult(true, "Các tem này đã được gộp vào hộp (bỏ qua).", box.Id, box.BoxNo, 0);
+
+        var now = DateTime.Now;
+        // gỡ tem khỏi hộp cũ (nếu có) rồi gắn vào hộp mới
+        var oldBoxIds = stamps.Where(s => s.BoxId != null && s.BoxId != box.Id)
+            .Select(s => s.BoxId!.Value).Distinct().ToList();
+        foreach (var s in stamps) { s.BoxId = box.Id; s.BoxedAt = now; }
+
+        // cập nhật lại số lượng các hộp cũ bị gỡ tem
+        foreach (var oldId in oldBoxIds)
+        {
+            var oldBox = await db.Boxes.FirstOrDefaultAsync(b => b.Id == oldId);
+            if (oldBox != null) oldBox.Quantity = await db.Stamps.CountAsync(s => s.BoxId == oldId);
+        }
+        box.Quantity = await db.Stamps.CountAsync(s => s.BoxId == box.Id);
+
+        // Ghi lịch sử gộp hộp (Map_IDInBoxHist, RefType=MERGE) để truy vết
+        var hist = new BoxHistory
+        {
+            BoxNo = box.BoxNo, FunctionName = "MAP_IDINBOX_MERGEX", RefType = "MERGE",
+            CreateDTimeUTC = now, QtyIDNo = stamps.Count, CreatedBy = createdBy, CreatedAt = now
+        };
+        foreach (var s in stamps) hist.Lines.Add(new BoxHistoryLine { QrId = s.QrId });
+        db.BoxHistories.Add(hist);
+
+        await db.SaveChangesAsync();
+        return new MergeBoxResult(true, $"Đã gộp {stamps.Count} tem vào hộp {box.BoxNo}.", box.Id, box.BoxNo, stamps.Count);
     }
 
     // ── ĐÓNG GÓI HỘP VÀO THÙNG (Map_Can) ────────────────────────────
