@@ -40,6 +40,9 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceDtl> InvoiceDtls => Set<InvoiceDtl>();
     public DbSet<SalesActivation> SalesActivations => Set<SalesActivation>();
     public DbSet<SalesActivationLine> SalesActivationLines => Set<SalesActivationLine>();
+    public DbSet<BlockType> BlockTypes => Set<BlockType>();
+    public DbSet<Block> Blocks => Set<Block>();
+    public DbSet<BlockLine> BlockLines => Set<BlockLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -203,6 +206,23 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ kích hoạt bán 1 lần
             e.HasOne(x => x.SalesActivation).WithMany(x => x.Lines).HasForeignKey(x => x.SalesActivationId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BlockType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // BlockType duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Block>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BlockNo }).IsUnique();   // mã block duy nhất trong tenant
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BlockLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ thuộc 1 block
+            e.HasOne(x => x.Block).WithMany(x => x.Lines).HasForeignKey(x => x.BlockId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

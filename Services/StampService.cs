@@ -50,6 +50,9 @@ public record PairResult(bool Ok, string Message, int Id, string MainQrId, strin
 /// <summary>Kết quả kích hoạt bán hàng (nghiệp vụ Inv_InvVerifiedID_ActivateSales).</summary>
 public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Count);
 
+/// <summary>Kết quả gom tem vào Block (nghiệp vụ Map_Block).</summary>
+public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int QtyVerified);
+
 public interface IStampService
 {
     // admin
@@ -133,6 +136,12 @@ public interface IStampService
     Task<SalesActivation?> GetSalesActivationAsync(int id);
     Task<SalesResult> ActivateSalesAsync(string saNo, int productId, string? customerCode, string? customerName,
         DateTime salesDTime, IEnumerable<string> qrIds, string? remark, string createdBy);
+    // gom tem vào Block (Map_Block)
+    Task<List<BlockType>> BlockTypesAsync();
+    Task<List<Block>> BlocksAsync();
+    Task<Block?> GetBlockAsync(int id);
+    Task<BlockResult> CreateBlockAsync(string blockNo, int productId, string blockType, string? blockLocalId,
+        string? shiftCode, string? lotCode, IEnumerable<string> qrIds, string? remark, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -1220,6 +1229,81 @@ public class StampService(AppDbContext db) : IStampService
         await db.SaveChangesAsync();
 
         return new SalesResult(true, $"Đã kích hoạt bán hàng {sa.SaNo} ({stamps.Count} tem).", sa.Id, sa.SaNo, stamps.Count);
+    }
+
+    // ── GOM TEM VÀO BLOCK (Map_Block) ───────────────────────────────
+    public Task<List<BlockType>> BlockTypesAsync() =>
+        db.BlockTypes.OrderBy(x => x.Code).ToListAsync();
+
+    public Task<List<Block>> BlocksAsync() =>
+        db.Blocks.Include(x => x.Product).Include(x => x.Lines)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<Block?> GetBlockAsync(int id) =>
+        db.Blocks.Include(x => x.Product).Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Gom 1 tập tem cùng (lô/ca/loại block) thành 1 Block logic. Mô phỏng
+    /// nghiệp vụ WAS_Map_Block_Add_New20220701 → Map_Block_AddX_New20230213
+    /// của EQR (InvGen.cs):
+    /// - BlockType phải tồn tại trong Mst_BlockType (Mst_BlockType_CheckDB).
+    /// - Phải có ít nhất 1 tem; mọi tem phải tồn tại trong hệ thống.
+    /// - Tem đã thuộc block khác → từ chối (1 tem chỉ thuộc 1 block).
+    /// - Qty = BlockSize của loại block; QtyVerified = số tem thực tế đã gom.
+    /// </summary>
+    public async Task<BlockResult> CreateBlockAsync(string blockNo, int productId, string blockType,
+        string? blockLocalId, string? shiftCode, string? lotCode, IEnumerable<string> qrIds, string? remark, string createdBy)
+    {
+        blockType = (blockType ?? "").Trim();
+        if (blockType.Length == 0)
+            return new BlockResult(false, "Cần chọn loại Block.", 0, "", 0);
+
+        var bt = await db.BlockTypes.FirstOrDefaultAsync(x => x.Code == blockType);
+        if (bt == null)
+            return new BlockResult(false, $"Loại Block '{blockType}' không tồn tại trong danh mục.", 0, "", 0);
+        if (!bt.IsActive)
+            return new BlockResult(false, $"Loại Block '{blockType}' đã ngừng dùng.", 0, "", 0);
+
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new BlockResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new BlockResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        // tem đã thuộc block khác
+        var used = await db.BlockLines.IgnoreQueryFilters()
+            .Where(l => codes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        if (used.Count > 0)
+            return new BlockResult(false, $"{used.Count} tem đã thuộc block khác: {string.Join(", ", used.Take(10))}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(blockNo)) blockNo = $"BLK{DateTime.Now:yyMMddHHmmss}";
+        blockNo = blockNo.Trim();
+        if (await db.Blocks.AnyAsync(x => x.BlockNo == blockNo))
+            return new BlockResult(false, $"Mã block {blockNo} đã tồn tại.", 0, "", 0);
+
+        var block = new Block
+        {
+            BlockNo = blockNo,
+            ProductId = productId > 0 ? productId : stamps[0].ProductId,
+            BlockType = blockType,
+            BlockLocalID = string.IsNullOrWhiteSpace(blockLocalId) ? null : blockLocalId.Trim(),
+            ShiftCode = string.IsNullOrWhiteSpace(shiftCode) ? null : shiftCode.Trim(),
+            LotCode = string.IsNullOrWhiteSpace(lotCode) ? null : lotCode.Trim(),
+            Qty = bt.BlockSize,
+            QtyVerified = stamps.Count,
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+        foreach (var s in stamps)
+            block.Lines.Add(new BlockLine { QrId = s.QrId, AddedAt = DateTime.Now });
+        db.Blocks.Add(block);
+        await db.SaveChangesAsync();
+
+        return new BlockResult(true, $"Đã gom {stamps.Count} tem vào block {block.BlockNo}.", block.Id, block.BlockNo, stamps.Count);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

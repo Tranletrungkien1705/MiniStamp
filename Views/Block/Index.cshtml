@@ -1,0 +1,26 @@
+@model List<Block>
+@{ ViewData["Title"] = "Block tem"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Các block đã gom</h6>
+        <a href="/Block/Create" class="btn btn-sm btn-primary"><i class="bi bi-collection me-1"></i>Gom tem vào block</a>
+    </div>
+    <p class="text-muted small">Nghiệp vụ <b>Map_Block</b> (EQR): gom các tem cùng lô/ca/loại block thành 1 block logic (thường = 1 pallet/lô đóng gói). Mỗi tem chỉ thuộc tối đa 1 block.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã block</th><th>Sản phẩm</th><th>Loại block</th><th>Lô / Ca</th><th class="text-end">Số tem</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var b in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Block/Detail/@b.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@b.BlockNo</td>
+                <td>@b.Product?.Name</td>
+                <td><span class="badge text-bg-secondary">@b.BlockType</span></td>
+                <td class="small text-muted">@b.LotCode @(string.IsNullOrWhiteSpace(b.ShiftCode) ? "" : "· " + b.ShiftCode)</td>
+                <td class="text-end fw-semibold">@b.QtyVerified / @b.Qty</td>
+                <td class="small text-muted">@b.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có block nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

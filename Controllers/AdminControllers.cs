@@ -158,6 +158,38 @@ public class StampPairController(IStampService svc) : Controller
     }
 }
 
+// Gom tem vào Block (nghiệp vụ Map_Block của EQR)
+public class BlockController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BlocksAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        ViewBag.BlockTypes = await svc.BlockTypesAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int productId, string? blockNo, string? blockType, string? blockLocalId,
+        string? shiftCode, string? lotCode, string? codes, string? remark)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); ViewBag.BlockTypes = await svc.BlockTypesAsync(); return View(); }
+        var r = await svc.CreateBlockAsync(blockNo ?? "", productId, blockType ?? "", blockLocalId, shiftCode, lotCode, list, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); ViewBag.BlockTypes = await svc.BlockTypesAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var b = await svc.GetBlockAsync(id);
+        if (b == null) return NotFound();
+        return View(b);
+    }
+}
+
 // Phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp của EQR)
 public class BrokenStampController(IStampService svc) : Controller
 {

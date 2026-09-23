@@ -266,6 +266,65 @@ public class SalesActivationLine : IOrgOwned
     public SalesActivation SalesActivation { get; set; } = null!;
 }
 
+// ── Loại Block (Mst_BlockType) — master data cho nghiệp vụ Map_Block ──
+// Nghiệp vụ EQR (bảng Mst_BlockType, worker Mst_BlockType_CheckDB, file
+// Master.cs): danh mục loại Block quy định BlockSize (số tem/hộp tối đa
+// trong 1 block). BlockType là khóa (Ma stamp, Ma Box, Ma Can, Ma Pack,
+// Ma Pallet, Ma Container...). FlagActive = '1'/'0'.
+public class BlockType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";        // BlockType — mã loại block (duy nhất trong tenant)
+    public string Name { get; set; } = "";        // BlockTypeName — tên loại block
+    public int BlockSize { get; set; }             // BlockSize — số đơn vị tối đa trong 1 block
+    public bool IsActive { get; set; } = true;     // FlagActive = '1'/'0'
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+// ── Block (Map_Block) — nghiệp vụ EQR ────────────────────────────────
+// Nghiệp vụ EQR (worker LIVE WAS_Map_Block_Add_New20220701 →
+// Map_Block_AddX_New20230213, file InvGen.cs): gom các tem/hộp cùng
+// (ShiftCode, LotCode, ProductCode, OrgID, InvCode, BlockType,
+// BlockLocalID) thành 1 Block logic (thường = 1 pallet/lô đóng gói).
+// Mỗi Block có BoxNo (mã block), Qty (BlockSize của loại block) và
+// QtyVerified (số tem thực tế đã gom). Ràng buộc EQR:
+//  - BlockType phải tồn tại trong Mst_BlockType (Mst_BlockType_CheckDB).
+//  - BlockType rỗng/BAOLE ⇒ không tạo block (chỉ map tem lẻ).
+//  - Mọi tem đưa vào phải tồn tại trong hệ thống.
+public class Block : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BlockNo { get; set; } = "";      // BoxNo — mã block (duy nhất trong tenant)
+    public int ProductId { get; set; }
+    public string BlockType { get; set; } = "";    // BlockType — loại block (khóa Mst_BlockType)
+    public string? BlockLocalID { get; set; }       // BlockLocalID — mã cục bộ của block
+    public string? ShiftCode { get; set; }          // ShiftCode — ca sản xuất
+    public string? LotCode { get; set; }            // LotCode — mã lô
+    public int Qty { get; set; }                    // Qty — BlockSize của loại block
+    public int QtyVerified { get; set; }            // QtyVerified — số tem thực tế đã gom
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+    public List<BlockLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết Block (1 tem đã gom vào block) ─────────────────────
+public class BlockLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BlockId { get; set; }
+    public string QrId { get; set; } = "";         // mã tem đã gom vào block
+    public DateTime AddedAt { get; set; } = DateTime.Now;
+
+    public Block Block { get; set; } = null!;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────
 public class InventoryInFG : IOrgOwned
 {

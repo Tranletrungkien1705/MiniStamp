@@ -39,6 +39,19 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục loại Block (Mst_BlockType) — master data cho nghiệp vụ Map_Block
+        if (!await db.BlockTypes.AnyAsync())
+        {
+            db.BlockTypes.AddRange(
+                new BlockType { Code = "MASTAMP", Name = "Mã stamp", BlockSize = 100, CreatedBy = "seed" },
+                new BlockType { Code = "MABOX", Name = "Mã Box", BlockSize = 50, CreatedBy = "seed" },
+                new BlockType { Code = "MACAN", Name = "Mã Can", BlockSize = 20, CreatedBy = "seed" },
+                new BlockType { Code = "MAPACK", Name = "Mã Pack", BlockSize = 10, CreatedBy = "seed" },
+                new BlockType { Code = "MAPALLET", Name = "Mã Pallet", BlockSize = 1000, CreatedBy = "seed" },
+                new BlockType { Code = "MACONTAINER", Name = "Mã Container", BlockSize = 5000, CreatedBy = "seed" });
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Products.AnyAsync())
         {
             var p1 = new Product { Code = "SP001", Name = "Phân bón NPK Lâm Thao 20kg", Manufacturer = "Supe Lâm Thao", WarrantyMonths = 0, Description = "Phân bón tổng hợp NPK." };
@@ -87,6 +100,22 @@ public static class Seeder
                     MainQrId = pairTwo[0].QrId, SubQrId = pairTwo[1].QrId,
                     Remark = "Cặp tem đôi mẫu", CreatedBy = "seed"
                 });
+                await db.SaveChangesAsync();
+            }
+
+            // 1 block mẫu (Map_Block) — gom 4 tem của lô thành 1 block loại MABOX
+            var blockFour = batch.Stamps.Skip(8).Take(4).ToList();
+            if (blockFour.Count > 0)
+            {
+                var blk = new Block
+                {
+                    BlockNo = "BLK-SEED-001", ProductId = p1.Id, BlockType = "MABOX",
+                    BlockLocalID = "PALLET-01", ShiftCode = "CA1", LotCode = batch.LotNo,
+                    Qty = 50, QtyVerified = blockFour.Count, Remark = "Block mẫu", CreatedBy = "seed"
+                };
+                foreach (var s in blockFour)
+                    blk.Lines.Add(new BlockLine { QrId = s.QrId, AddedAt = DateTime.Now });
+                db.Blocks.Add(blk);
                 await db.SaveChangesAsync();
             }
 
@@ -265,7 +294,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

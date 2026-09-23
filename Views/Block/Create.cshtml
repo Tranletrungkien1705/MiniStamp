@@ -1,0 +1,36 @@
+@{
+    ViewData["Title"] = "Gom tem vào block";
+    var products = ViewBag.Products as List<Product> ?? new();
+    var blockTypes = ViewBag.BlockTypes as List<BlockType> ?? new();
+}
+<div class="card" style="max-width:820px"><div class="card-body">
+    <p class="text-muted small">Gom các tem cùng lô/ca/loại block thành 1 block logic (nghiệp vụ <b>Map_Block</b>). Loại block quy định số tem tối đa (BlockSize). Mỗi tem chỉ thuộc 1 block.</p>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small text-muted">Sản phẩm *</label>
+                <select name="productId" class="form-select" required>
+                    <option value="">— Chọn sản phẩm —</option>
+                    @foreach (var p in products) { <option value="@p.Id">@p.Code — @p.Name</option> }
+                </select></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Loại block *</label>
+                <select name="blockType" class="form-select" required>
+                    <option value="">— Chọn loại block —</option>
+                    @foreach (var t in blockTypes) { <option value="@t.Code">@t.Code — @t.Name (tối đa @t.BlockSize)</option> }
+                </select></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Mã block</label>
+                <input name="blockNo" class="form-control" style="font-family:monospace" placeholder="Để trống sẽ tự sinh" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Mã cục bộ (BlockLocalID)</label>
+                <input name="blockLocalID" class="form-control" placeholder="Tùy chọn" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Mã lô (LotCode)</label>
+                <input name="lotCode" class="form-control" placeholder="Tùy chọn" /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Ca sản xuất (ShiftCode)</label>
+                <input name="shiftCode" class="form-control" placeholder="Tùy chọn" /></div>
+            <div class="col-12"><label class="form-label small text-muted">Danh sách mã tem * (mỗi dòng 1 mã, hoặc cách nhau bởi dấu phẩy)</label>
+                <textarea name="codes" class="form-control" rows="5" style="font-family:monospace" placeholder="A1B2C3D4E5F6&#10;F6E5D4C3B2A1" required></textarea></div>
+            <div class="col-12"><label class="form-label small text-muted">Ghi chú</label>
+                <input name="remark" class="form-control" placeholder="Tùy chọn" /></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-collection me-1"></i>Gom vào block</button> <a href="/Block" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>
