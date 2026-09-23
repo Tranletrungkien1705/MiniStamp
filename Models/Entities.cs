@@ -804,6 +804,75 @@ public class StampLifecyclePeriod : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
+// ── Phiếu xuất kho THEO HỘP (Inv_InventoryVerifiedID_OutByBox) ───────
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InventoryVerifiedID_OutByBox_New20220601
+// → Inv_InventoryVerifiedID_OutByBoxX_New20220601, file zTemp.cs): xuất kho
+// bằng cách QUÉT MÃ — mỗi mã quét là 1 tem lẻ (StampType='ID') hoặc 1 HỘP
+// (StampType='BOX'). Khác với "xuất kho theo tem" (Shipment): ở đây người
+// dùng quét cả mã hộp, hệ thống tự BUNG hộp ra toàn bộ tem con trong hộp rồi
+// mới ghi phiếu xuất. Ràng buộc EQR:
+//  - Mỗi mã quét phải có StampType = ID hoặc BOX (StampTypeInvalid).
+//  - Tem lẻ (ID) phải tồn tại trong kho sinh số (IDNoNotExistInInvGen).
+//  - Tem phải đã được ghép sản phẩm + đóng vào hộp (IDNoNotMapBox).
+//  - Hộp (BOX) phải tồn tại và có tem con.
+//  - Tem đã xuất ở phiếu khác ⇒ từ chối (không xuất trùng).
+public class BoxShipment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BsNo { get; set; } = "";          // mã phiếu xuất theo hộp (duy nhất trong tenant)
+    public string Status { get; set; } = "PENDING";  // PENDING / SHIPPED / CANCEL
+
+    // đơn hàng nguồn
+    public string? RefNoSys { get; set; }
+    public string? RefNo { get; set; }
+    public string? RefType { get; set; }
+
+    // vận chuyển
+    public string? PlateNo { get; set; }
+    public string? MoocNo { get; set; }
+    public string? DriverName { get; set; }
+    public string? DriverPhoneNo { get; set; }
+    public string? TransportType { get; set; }
+    public string? ReceivePlace { get; set; }
+
+    // khách hàng
+    public string? CustomerCode { get; set; }
+    public string? CustomerName { get; set; }
+    public string? CustomerAddress { get; set; }
+
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ShippedAt { get; set; }
+    public string? ShippedBy { get; set; }
+
+    // hủy phiếu xuất
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelledBy { get; set; }
+    public string? CancelReason { get; set; }
+
+    public List<BoxShipmentLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu xuất theo hộp (1 mã quét đã bung ra tem) ─────
+// ScanCode = mã người dùng quét (tem lẻ hoặc mã hộp); StampType = ID/BOX;
+// QrId = tem thực tế được xuất (với BOX thì 1 dòng cho mỗi tem con trong hộp).
+public class BoxShipmentLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BoxShipmentId { get; set; }
+    public string ScanCode { get; set; } = "";       // mã quét gốc (IDNo hoặc BoxNo)
+    public string StampType { get; set; } = "ID";    // ID / BOX
+    public string QrId { get; set; } = "";           // tem thực tế đã xuất
+    public int ProductId { get; set; }
+    public DateTime ShippedAt { get; set; } = DateTime.Now;
+
+    public BoxShipment BoxShipment { get; set; } = null!;
+    public Product Product { get; set; } = null!;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {

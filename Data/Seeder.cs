@@ -395,6 +395,25 @@ public static class Seeder
                 Remark = "Chốt số liệu vòng đời tem kỳ mẫu", CreatedBy = "seed"
             });
             await db.SaveChangesAsync();
+
+            // 1 phiếu xuất kho theo hộp mẫu (Inv_InventoryVerifiedID_OutByBox) — quét 1 mã hộp
+            // (BOX-SEED-001 chứa 5 tem đầu lô) + 1 tem lẻ (tem thứ 6) để demo nghiệp vụ bung hộp.
+            var boxShip = new BoxShipment
+            {
+                BsNo = "PXKH-SEED-001", CustomerCode = "KH002", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                CustomerAddress = "TP. Việt Trì, Phú Thọ", PlateNo = "29C-123.45", DriverName = "Nguyễn Văn A",
+                DriverPhoneNo = "0912345678", TransportType = "Đường bộ", ReceivePlace = "Kho đại lý Phú Thọ",
+                RefNoSys = "DH-SEED-002", RefType = "SALES", Remark = "Xuất theo hộp lô mẫu",
+                CreatedBy = "seed", Status = "PENDING"
+            };
+            var boxStamps = batch.Stamps.Where(s => s.BoxId == box.Id).ToList();
+            foreach (var s in boxStamps)
+                boxShip.Lines.Add(new BoxShipmentLine { ScanCode = box.BoxNo, StampType = "BOX", QrId = s.QrId, ProductId = s.ProductId, ShippedAt = DateTime.Now });
+            var looseStamp = batch.Stamps.Skip(6).FirstOrDefault();
+            if (looseStamp != null)
+                boxShip.Lines.Add(new BoxShipmentLine { ScanCode = looseStamp.QrId, StampType = "ID", QrId = looseStamp.QrId, ProductId = looseStamp.ProductId, ShippedAt = DateTime.Now });
+            db.BoxShipments.Add(boxShip);
+            await db.SaveChangesAsync();
         }
     }
 
@@ -402,7 +421,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods", "BoxShipments", "BoxShipmentLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

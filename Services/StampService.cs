@@ -79,6 +79,12 @@ public record LifecycleResult(bool Ok, string Message, int Id, DateTime PeriodMo
 public record WarrantyResult(bool Ok, string Message, int Id, string QrId, string WarrantyNo,
     DateTime WarrantyDateStart, bool IsFirstActivate, int WarrantyCount);
 
+/// <summary>Kết quả tạo/xuất phiếu xuất kho theo hộp (nghiệp vụ Inv_InventoryVerifiedID_OutByBox).</summary>
+public record BoxShipResult(bool Ok, string Message, int Id, string BsNo, int TotalQty);
+
+/// <summary>Kết quả hủy phiếu xuất kho theo hộp (nghiệp vụ Inv_VerifiedIDInOut_Cancel).</summary>
+public record BoxShipCancelResult(bool Ok, string Message, int Id, string BsNo, int Released);
+
 public interface IStampService
 {
     // admin
@@ -204,6 +210,12 @@ public interface IStampService
     Task<List<StampLifecyclePeriod>> LifecyclePeriodsAsync();
     Task<StampLifecyclePeriod?> GetLifecyclePeriodAsync(int id);
     Task<LifecycleResult> SnapshotLifecycleAsync(DateTime periodMonth, string? remark, string createdBy);
+    // xuất kho theo hộp (Inv_InventoryVerifiedID_OutByBox)
+    Task<List<BoxShipment>> BoxShipmentsAsync();
+    Task<BoxShipment?> GetBoxShipmentAsync(int id);
+    Task<BoxShipResult> CreateBoxShipmentAsync(BoxShipment header, IEnumerable<(string ScanCode, string StampType)> scans, string createdBy);
+    Task<BoxShipResult> ShipBoxShipmentAsync(int id, string shippedBy);
+    Task<BoxShipCancelResult> CancelBoxShipmentAsync(int id, string? reason, string cancelledBy);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -2015,5 +2027,166 @@ public class StampService(AppDbContext db) : IStampService
         return new LifecycleResult(true,
             $"Đã chốt vòng đời tem kỳ {period:MM/yyyy}: ghép SP {qtyVerified}, bán {qtySales}, bảo hành {qtyWarranty}, tra cứu {qtySearch}.",
             rec.Id, period, qtyVerified, qtySales, qtyWarranty, qtySearch);
+    }
+
+    // ── XUẤT KHO THEO HỘP (Inv_InventoryVerifiedID_OutByBox) ────────
+    public Task<List<BoxShipment>> BoxShipmentsAsync() =>
+        db.BoxShipments.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<BoxShipment?> GetBoxShipmentAsync(int id) =>
+        db.BoxShipments.Include(x => x.Lines).ThenInclude(l => l.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo phiếu xuất kho THEO HỘP. Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventoryVerifiedID_OutByBox_New20220601 của EQR (zTemp.cs):
+    /// - Mỗi mã quét phải có StampType = ID (tem lẻ) hoặc BOX (mã hộp) — nếu khác ⇒ từ chối.
+    /// - Tem lẻ (ID) phải tồn tại trong hệ thống (IDNoNotExistInInvGen).
+    /// - Tem phải đã được ghép sản phẩm + đóng vào hộp (IDNoNotMapBox).
+    /// - Hộp (BOX) phải tồn tại và có tem con.
+    /// - Tem đã xuất ở phiếu khác ⇒ từ chối (không xuất trùng).
+    /// - Phiếu mới ở trạng thái PENDING; mỗi tem con trong hộp thành 1 dòng chi tiết.
+    /// </summary>
+    public async Task<BoxShipResult> CreateBoxShipmentAsync(BoxShipment header, IEnumerable<(string ScanCode, string StampType)> scans, string createdBy)
+    {
+        var list = (scans ?? [])
+            .Select(s => (ScanCode: (s.ScanCode ?? "").Trim().ToUpperInvariant(), StampType: (s.StampType ?? "").Trim().ToUpperInvariant()))
+            .Where(s => s.ScanCode.Length > 0).ToList();
+        if (list.Count == 0) return new BoxShipResult(false, "Chưa nhập mã quét nào.", 0, "", 0);
+
+        // StampType chỉ nhận ID/BOX (StampTypeInvalid)
+        var badType = list.Where(s => s.StampType != "ID" && s.StampType != "BOX").ToList();
+        if (badType.Count > 0)
+            return new BoxShipResult(false, $"Loại quét không hợp lệ (chỉ nhận ID/BOX): {string.Join(", ", badType.Take(10).Select(s => s.ScanCode))}", 0, "", 0);
+
+        // tách tem lẻ (ID) và hộp (BOX)
+        var idCodes = list.Where(s => s.StampType == "ID").Select(s => s.ScanCode).Distinct().ToList();
+        var boxNos = list.Where(s => s.StampType == "BOX").Select(s => s.ScanCode).Distinct().ToList();
+
+        // tem lẻ phải tồn tại (IDNoNotExistInInvGen)
+        var idStamps = await db.Stamps.Where(s => idCodes.Contains(s.QrId)).ToListAsync();
+        var missingId = idCodes.Except(idStamps.Select(s => s.QrId)).ToList();
+        if (missingId.Count > 0)
+            return new BoxShipResult(false, $"Không tìm thấy {missingId.Count} mã tem: {string.Join(", ", missingId.Take(10))}", 0, "", 0);
+
+        // tem lẻ phải đã đóng vào hộp (IDNoNotMapBox)
+        var notBoxed = idStamps.Where(s => s.BoxId == null).ToList();
+        if (notBoxed.Count > 0)
+            return new BoxShipResult(false, $"{notBoxed.Count} tem chưa được đóng vào hộp, không thể xuất theo hộp: {string.Join(", ", notBoxed.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        // hộp phải tồn tại
+        var boxes = await db.Boxes.Where(b => boxNos.Contains(b.BoxNo)).ToListAsync();
+        var missingBox = boxNos.Except(boxes.Select(b => b.BoxNo)).ToList();
+        if (missingBox.Count > 0)
+            return new BoxShipResult(false, $"Không tìm thấy {missingBox.Count} mã hộp: {string.Join(", ", missingBox.Take(10))}", 0, "", 0);
+
+        // bung hộp ra toàn bộ tem con
+        var boxIds = boxes.Select(b => b.Id).ToList();
+        var boxStamps = await db.Stamps.Where(s => s.BoxId != null && boxIds.Contains(s.BoxId.Value)).ToListAsync();
+        var emptyBoxes = boxes.Where(b => !boxStamps.Any(s => s.BoxId == b.Id)).ToList();
+        if (emptyBoxes.Count > 0)
+            return new BoxShipResult(false, $"{emptyBoxes.Count} hộp không có tem con: {string.Join(", ", emptyBoxes.Take(10).Select(b => b.BoxNo))}", 0, "", 0);
+
+        // gộp tem lẻ + tem bung từ hộp (khử trùng theo QrId)
+        var allStamps = idStamps.Concat(boxStamps)
+            .GroupBy(s => s.QrId).Select(g => g.First()).ToList();
+
+        // tem đã vô hiệu/rách-vỡ
+        var bad = allStamps.Where(s => s.Status == StampStatus.Void || s.Status == StampStatus.Broken).ToList();
+        if (bad.Count > 0)
+            return new BoxShipResult(false, $"{bad.Count} tem đã vô hiệu/rách-vỡ, không thể xuất: {string.Join(", ", bad.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        // tem đã xuất ở phiếu khác (cả phiếu xuất theo tem lẫn theo hộp)
+        var allCodes = allStamps.Select(s => s.QrId).ToList();
+        var shippedByStamp = await db.ShipmentLines.IgnoreQueryFilters()
+            .Where(l => allCodes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        var shippedByBox = await db.BoxShipmentLines.IgnoreQueryFilters()
+            .Where(l => allCodes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        var alreadyShipped = shippedByStamp.Concat(shippedByBox).Distinct().ToList();
+        if (alreadyShipped.Count > 0)
+            return new BoxShipResult(false, $"{alreadyShipped.Count} tem đã được xuất trước đó: {string.Join(", ", alreadyShipped.Take(10))}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(header.BsNo)) header.BsNo = $"PXKH{DateTime.Now:yyMMddHHmmss}";
+        header.BsNo = header.BsNo.Trim();
+        if (await db.BoxShipments.AnyAsync(x => x.BsNo == header.BsNo))
+            return new BoxShipResult(false, $"Mã phiếu {header.BsNo} đã tồn tại.", 0, "", 0);
+
+        header.Status = "PENDING";
+        header.CreatedBy = createdBy;
+        var now = DateTime.Now;
+
+        // dòng chi tiết: tem lẻ ghi ScanCode = chính nó; tem bung từ hộp ghi ScanCode = mã hộp
+        var boxNoByBoxId = boxes.ToDictionary(b => b.Id, b => b.BoxNo);
+        foreach (var s in idStamps)
+            header.Lines.Add(new BoxShipmentLine { ScanCode = s.QrId, StampType = "ID", QrId = s.QrId, ProductId = s.ProductId, ShippedAt = now });
+        foreach (var s in boxStamps)
+            header.Lines.Add(new BoxShipmentLine
+            {
+                ScanCode = s.BoxId != null && boxNoByBoxId.TryGetValue(s.BoxId.Value, out var bn) ? bn : "",
+                StampType = "BOX", QrId = s.QrId, ProductId = s.ProductId, ShippedAt = now
+            });
+
+        db.BoxShipments.Add(header);
+        await db.SaveChangesAsync();
+        return new BoxShipResult(true, $"Đã tạo phiếu xuất theo hộp {header.BsNo} ({header.Lines.Count} tem).", header.Id, header.BsNo, header.Lines.Count);
+    }
+
+    /// <summary>
+    /// Xuất phiếu xuất theo hộp (ghi nhận tem ra khỏi kho). Mô phỏng bước OutInv của EQR:
+    /// - Chỉ phiếu PENDING mới được xuất.
+    /// - Xuất xong: Status = SHIPPED + ghi mốc/người xuất; đánh dấu tem đã xuất (ShipmentId, ShippedAt, CustomerCode).
+    /// </summary>
+    public async Task<BoxShipResult> ShipBoxShipmentAsync(int id, string shippedBy)
+    {
+        var sh = await db.BoxShipments.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (sh == null) return new BoxShipResult(false, "Không tìm thấy phiếu xuất theo hộp.", 0, "", 0);
+        if (sh.Status != "PENDING") return new BoxShipResult(false, $"Phiếu {sh.BsNo} đang ở trạng thái {sh.Status}, không thể xuất.", sh.Id, sh.BsNo, 0);
+
+        var codes = sh.Lines.Select(l => l.QrId).ToList();
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+        {
+            s.ShipmentId = sh.Id;
+            s.ShippedAt = now;
+            s.CustomerCode = sh.CustomerCode;
+        }
+        sh.Status = "SHIPPED";
+        sh.ShippedAt = now;
+        sh.ShippedBy = shippedBy;
+        await db.SaveChangesAsync();
+        return new BoxShipResult(true, $"Đã xuất phiếu {sh.BsNo} ({stamps.Count} tem).", sh.Id, sh.BsNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Hủy phiếu xuất theo hộp. Mô phỏng nghiệp vụ WAS_Inv_VerifiedIDInOut_Cancel của EQR:
+    /// - Phiếu phải tồn tại và chưa bị hủy (không hủy trùng).
+    /// - Chỉ hủy được phiếu đã xuất (SHIPPED).
+    /// - Hủy xong: Status = CANCEL + ghi mốc/người/lý do; giải phóng tem về trạng thái chưa xuất.
+    /// </summary>
+    public async Task<BoxShipCancelResult> CancelBoxShipmentAsync(int id, string? reason, string cancelledBy)
+    {
+        var sh = await db.BoxShipments.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (sh == null) return new BoxShipCancelResult(false, "Không tìm thấy phiếu xuất theo hộp.", 0, "", 0);
+        if (sh.Status == "CANCEL")
+            return new BoxShipCancelResult(false, $"Phiếu {sh.BsNo} đã bị hủy trước đó.", sh.Id, sh.BsNo, 0);
+        if (sh.Status != "SHIPPED")
+            return new BoxShipCancelResult(false, $"Phiếu {sh.BsNo} đang ở trạng thái {sh.Status}, chỉ hủy được phiếu đã xuất (SHIPPED).", sh.Id, sh.BsNo, 0);
+
+        var codes = sh.Lines.Select(l => l.QrId).ToList();
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+        {
+            s.ShipmentId = null;
+            s.ShippedAt = null;
+            s.CustomerCode = null;
+        }
+        sh.Status = "CANCEL";
+        sh.CancelledAt = now;
+        sh.CancelledBy = cancelledBy;
+        sh.CancelReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        await db.SaveChangesAsync();
+        return new BoxShipCancelResult(true, $"Đã hủy phiếu {sh.BsNo}, giải phóng {stamps.Count} tem về trạng thái chưa xuất.", sh.Id, sh.BsNo, stamps.Count);
     }
 }

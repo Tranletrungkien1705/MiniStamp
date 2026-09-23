@@ -442,6 +442,73 @@ public class ShipmentController(IStampService svc) : Controller
     }
 }
 
+// Xuất kho theo hộp (nghiệp vụ Inv_InventoryVerifiedID_OutByBox của EQR)
+public class BoxShipmentController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BoxShipmentsAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? bsNo, string? customerCode, string? customerName,
+        string? customerAddress, string? plateNo, string? moocNo, string? driverName, string? driverPhoneNo,
+        string? transportType, string? receivePlace, string? refNoSys, string? refNo, string? refType,
+        string? remark, string? codes)
+    {
+        // Mỗi dòng quét: "<mã>" (mặc định tem lẻ ID) hoặc "BOX:<mã hộp>" / "ID:<mã tem>"
+        var scans = new List<(string, string)>();
+        foreach (var raw in (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var token = raw.Trim();
+            if (token.Length == 0) continue;
+            var type = "ID";
+            var code = token;
+            var idx = token.IndexOf(':');
+            if (idx > 0)
+            {
+                type = token[..idx].Trim().ToUpperInvariant();
+                code = token[(idx + 1)..].Trim();
+            }
+            scans.Add((code, type));
+        }
+        var header = new BoxShipment
+        {
+            BsNo = bsNo ?? "",
+            CustomerCode = customerCode, CustomerName = customerName, CustomerAddress = customerAddress,
+            PlateNo = plateNo, MoocNo = moocNo, DriverName = driverName, DriverPhoneNo = driverPhoneNo,
+            TransportType = transportType, ReceivePlace = receivePlace,
+            RefNoSys = refNoSys, RefNo = refNo, RefType = refType, Remark = remark
+        };
+        var r = await svc.CreateBoxShipmentAsync(header, scans, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var s = await svc.GetBoxShipmentAsync(id);
+        if (s == null) return NotFound();
+        return View(s);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Ship(int id)
+    {
+        var r = await svc.ShipBoxShipmentAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var r = await svc.CancelBoxShipmentAsync(id, reason, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 // Kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive của EQR)
 public class ProductionActiveController(IStampService svc) : Controller
 {

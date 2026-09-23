@@ -52,6 +52,8 @@ public class AppDbContext : DbContext
     public DbSet<ReqInvOut> ReqInvOuts => Set<ReqInvOut>();
     public DbSet<ReqInvOutDtl> ReqInvOutDtls => Set<ReqInvOutDtl>();
     public DbSet<StampLifecyclePeriod> StampLifecyclePeriods => Set<StampLifecyclePeriod>();
+    public DbSet<BoxShipment> BoxShipments => Set<BoxShipment>();
+    public DbSet<BoxShipmentLine> BoxShipmentLines => Set<BoxShipmentLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -284,6 +286,18 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<LotteryReward>().HasQueryFilter(x => x.OrgId == _orgId);
+        b.Entity<BoxShipment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BsNo }).IsUnique();   // mã phiếu duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BoxShipmentLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ xuất 1 lần
+            e.HasOne(x => x.BoxShipment).WithMany(x => x.Lines).HasForeignKey(x => x.BoxShipmentId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
     }
 
     public override int SaveChanges() { StampOrg(); return base.SaveChanges(); }
