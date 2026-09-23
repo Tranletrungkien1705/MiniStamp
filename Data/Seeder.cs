@@ -91,6 +91,13 @@ public static class Seeder
             carton.BoxCount = 1;
             await db.SaveChangesAsync();
 
+            // Gán trực tiếp 2 tem lẻ vào thùng mẫu (Inv_InventoryVerifiedID_UpdCan)
+            // — tem thứ 7, 8 của lô gán thẳng vào thùng, không qua hộp.
+            var canStamps = batch.Stamps.Skip(6).Take(2).ToList();
+            foreach (var s in canStamps) { s.CartonId = carton.Id; s.CartonedAt = DateTime.Now; }
+            carton.StampCount = canStamps.Count;
+            await db.SaveChangesAsync();
+
             // 1 bản ghi lịch sử đóng hộp mẫu (Map_IDInBoxHist) — lần đóng 5 tem vào hộp mẫu
             var hist = new BoxHistory
             {
@@ -534,6 +541,10 @@ public static class Seeder
         };
         foreach (var t in tables)
             sql.Add($"ALTER TABLE ministamp.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
+        // Gán tem trực tiếp vào thùng (Inv_InventoryVerifiedID_UpdCan) — cột mới trên Stamps/Cartons.
+        sql.Add("ALTER TABLE ministamp.\"Stamps\" ADD COLUMN IF NOT EXISTS \"CartonId\" integer NULL");
+        sql.Add("ALTER TABLE ministamp.\"Stamps\" ADD COLUMN IF NOT EXISTS \"CartonedAt\" timestamp NULL");
+        sql.Add("ALTER TABLE ministamp.\"Cartons\" ADD COLUMN IF NOT EXISTS \"StampCount\" integer NOT NULL DEFAULT 0");
         foreach (var s in sql)
             try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
     }

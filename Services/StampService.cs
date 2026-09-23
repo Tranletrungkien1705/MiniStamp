@@ -17,6 +17,9 @@ public record PackResult(bool Ok, string Message, int BoxId, string BoxNo, int P
 /// <summary>Kết quả đóng gói hộp vào thùng (nghiệp vụ Map_Can).</summary>
 public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, int Packed);
 
+/// <summary>Kết quả gán tem trực tiếp vào thùng (nghiệp vụ Inv_InventoryVerifiedID_UpdCan).</summary>
+public record AssignCanResult(bool Ok, string Message, int CartonId, string CanNo, int Assigned);
+
 /// <summary>Kết quả khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo).</summary>
 public record RestoreResult(bool Ok, string Message, int BoxHistoryId, string BoxNo, int Restored, int Flagged);
 
@@ -120,6 +123,8 @@ public interface IStampService
     Task<List<Carton>> CartonsAsync();
     Task<Carton?> GetCartonAsync(int id);
     Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
+    // gán tem trực tiếp vào thùng (Inv_InventoryVerifiedID_UpdCan)
+    Task<AssignCanResult> AssignStampsToCartonAsync(string canNo, IEnumerable<string> qrIds, string createdBy);
     // khôi phục hộp tem từ lịch sử (Map_IDInBox_RestoreBoxNo)
     Task<List<BoxHistory>> BoxHistoriesAsync(string? boxNo);
     Task<BoxHistory?> GetBoxHistoryAsync(int id);
@@ -461,6 +466,7 @@ public class StampService(AppDbContext db) : IStampService
 
     public Task<Carton?> GetCartonAsync(int id) =>
         db.Cartons.Include(x => x.Product).Include(x => x.Boxes).ThenInclude(b => b.Product)
+            .Include(x => x.Stamps).ThenInclude(s => s.Product)
             .FirstOrDefaultAsync(x => x.Id == id);
 
     /// <summary>
@@ -505,6 +511,44 @@ public class StampService(AppDbContext db) : IStampService
         carton.BoxCount = await db.Boxes.CountAsync(b => b.CartonId == carton.Id);
         await db.SaveChangesAsync();
         return new CartonResult(true, $"Đã đóng {boxes.Count} hộp vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, boxes.Count);
+    }
+
+    /// <summary>
+    /// Gán trực tiếp danh sách tem (theo QrId) vào 1 thùng (Can). Mô phỏng nghiệp vụ
+    /// WAS_Inv_InventoryVerifiedID_UpdCan của EQR (zTemp.cs) — khác với đóng thùng theo hộp
+    /// (Map_Can): ở đây gán từng con tem lẻ vào thùng, không qua hộp. Ràng buộc EQR:
+    ///  - Mọi tem phải tồn tại trong hệ thống (InvalidIDNo).
+    ///  - Thùng phải tồn tại (CanNoNotExistInInvGen).
+    ///  - Tem chưa được gán thùng trước đó (InvalidFlagCan).
+    ///  - Gán xong: tem.CartonId + CartonedAt; cập nhật StampCount của thùng.
+    /// </summary>
+    public async Task<AssignCanResult> AssignStampsToCartonAsync(string canNo, IEnumerable<string> qrIds, string createdBy)
+    {
+        canNo = (canNo ?? "").Trim().ToUpperInvariant();
+        if (canNo.Length == 0) return new AssignCanResult(false, "Cần nhập mã thùng.", 0, "", 0);
+
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new AssignCanResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var carton = await db.Cartons.FirstOrDefaultAsync(c => c.CanNo == canNo);
+        if (carton == null) return new AssignCanResult(false, $"Thùng {canNo} không tồn tại.", 0, canNo, 0);
+
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new AssignCanResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", carton.Id, canNo, 0);
+
+        // tem đã được gán thùng khác (InvalidFlagCan)
+        var already = stamps.Where(s => s.CartonId != null && s.CartonId != carton.Id).ToList();
+        if (already.Count > 0)
+            return new AssignCanResult(false, $"{already.Count} tem đã được gán thùng khác: {string.Join(", ", already.Take(10).Select(s => s.QrId))}", carton.Id, canNo, 0);
+
+        var now = DateTime.Now;
+        foreach (var s in stamps) { s.CartonId = carton.Id; s.CartonedAt = now; }
+        carton.StampCount = await db.Stamps.CountAsync(s => s.CartonId == carton.Id);
+        await db.SaveChangesAsync();
+        return new AssignCanResult(true, $"Đã gán {stamps.Count} tem vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, stamps.Count);
     }
 
     // ── GHÉP CẶP TEM (Map_StampPair) ────────────────────────────────

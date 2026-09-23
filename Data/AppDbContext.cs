@@ -83,6 +83,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Batch).WithMany(x => x.Stamps).HasForeignKey(x => x.BatchId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasOne(x => x.Box).WithMany(x => x.Stamps).HasForeignKey(x => x.BoxId);
+            e.HasOne(x => x.Carton).WithMany(x => x.Stamps).HasForeignKey(x => x.CartonId);
             e.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId);
             e.HasOne(x => x.SalesActivation).WithMany().HasForeignKey(x => x.SalesActivationId);
             e.HasQueryFilter(x => x.OrgId == _orgId);

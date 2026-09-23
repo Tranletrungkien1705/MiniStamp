@@ -157,6 +157,19 @@ public class CartonController(IStampService svc) : Controller
         if (c == null) return NotFound();
         return View(c);
     }
+
+    // Gán tem trực tiếp vào thùng (nghiệp vụ Inv_InventoryVerifiedID_UpdCan của EQR)
+    public IActionResult Assign() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Assign(string? canNo, string? codes)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        var r = await svc.AssignStampsToCartonAsync(canNo ?? "", list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.CartonId });
+    }
 }
 
 // Ghép cặp tem (nghiệp vụ Map_StampPair của EQR)

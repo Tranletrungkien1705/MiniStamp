@@ -6,9 +6,12 @@
     <div class="d-flex justify-content-between flex-wrap gap-2">
         <div>
             <h5 class="fw-bold mb-1">@Model.Product.Name</h5>
-            <div class="text-muted small">Thùng <b>@Model.CanNo</b> · <b>@Model.BoxCount</b> hộp · đóng lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+            <div class="text-muted small">Thùng <b>@Model.CanNo</b> · <b>@Model.BoxCount</b> hộp · <b>@Model.StampCount</b> tem gán trực tiếp · đóng lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
         </div>
-        <a href="/Carton" class="btn btn-sm btn-outline-primary align-self-start">Danh sách thùng</a>
+        <div class="align-self-start d-flex gap-2">
+            <a href="/Carton/Assign" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Gán tem vào thùng</a>
+            <a href="/Carton" class="btn btn-sm btn-outline-primary">Danh sách thùng</a>
+        </div>
     </div>
 </div></div>
 
@@ -27,6 +30,24 @@
             </tr>
         }
         @if (Model.Boxes.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Thùng chưa có hộp nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
+
+<div class="card mt-3"><div class="card-body">
+    <h6 class="fw-bold mb-1">Tem gán trực tiếp vào thùng (@Model.Stamps.Count/@Model.StampCount)</h6>
+    <p class="text-muted small">Các tem lẻ được gán thẳng vào thùng (nghiệp vụ Inv_InventoryVerifiedID_UpdCan), không qua hộp.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã tem</th><th>Sản phẩm</th><th>Gán lúc</th></tr></thead>
+        <tbody>
+        @foreach (var s in Model.Stamps)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@s.QrId</td><td>@s.Product.Name</td>
+                <td class="small text-muted">@(s.CartonedAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+            </tr>
+        }
+        @if (Model.Stamps.Count == 0) { <tr><td colspan="3" class="text-center text-muted py-4">Chưa có tem nào gán trực tiếp.</td></tr> }
         </tbody>
     </table>
 </div></div>

@@ -69,11 +69,13 @@ public class Carton : IOrgOwned
     public string CanNo { get; set; } = "";        // mã thùng (duy nhất trong tenant)
     public int ProductId { get; set; }
     public int BoxCount { get; set; }              // số hộp đã đóng vào thùng
+    public int StampCount { get; set; }            // số tem gán trực tiếp vào thùng (Inv_InventoryVerifiedID_UpdCan)
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public Product Product { get; set; } = null!;
     public List<Box> Boxes { get; set; } = [];
+    public List<Stamp> Stamps { get; set; } = [];
 }
 
 // ── Lịch sử đóng hộp (Map_IDInBoxHist) — nghiệp vụ EQR ───────────────
@@ -148,6 +150,10 @@ public class Stamp : IOrgOwned
     public int? BoxId { get; set; }
     public DateTime? BoxedAt { get; set; }
 
+    // gán tem trực tiếp vào thùng (Inv_InventoryVerifiedID_UpdCan) — nghiệp vụ EQR
+    public int? CartonId { get; set; }
+    public DateTime? CartonedAt { get; set; }
+
     // kích hoạt bảo hành (người dùng cuối)
     public DateTime? ActivatedAt { get; set; }
     public string? ActivatedPhone { get; set; }
@@ -185,6 +191,7 @@ public class Stamp : IOrgOwned
     public StampBatch Batch { get; set; } = null!;
     public Product Product { get; set; } = null!;
     public Box? Box { get; set; }
+    public Carton? Carton { get; set; }
     public Shipment? Shipment { get; set; }
     public SalesActivation? SalesActivation { get; set; }
 }
