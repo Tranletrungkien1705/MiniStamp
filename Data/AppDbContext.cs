@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductLife> ProductLives => Set<ProductLife>();
     public DbSet<ProductionActive> ProductionActives => Set<ProductionActive>();
     public DbSet<OriginCatalog> OriginCatalogs => Set<OriginCatalog>();
+    public DbSet<Gs1Location> Gs1Locations => Set<Gs1Location>();
     public DbSet<TraceEventType> TraceEventTypes => Set<TraceEventType>();
     public DbSet<TraceKde> TraceKdes => Set<TraceKde>();
     public DbSet<TraceEventTypeKde> TraceEventTypeKdes => Set<TraceEventTypeKde>();
@@ -147,6 +148,11 @@ public class AppDbContext : DbContext
         b.Entity<OriginCatalog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // NguonGocCode duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Gs1Location>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();   // GLNCode duy nhất trong tenant
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TraceEventType>(e =>

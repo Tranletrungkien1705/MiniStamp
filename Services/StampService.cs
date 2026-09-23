@@ -35,6 +35,9 @@ public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime Ex
 /// <summary>Kết quả thao tác danh mục nguồn gốc (nghiệp vụ Mst_NguonGoc).</summary>
 public record OriginResult(bool Ok, string Message, int Id, string Code);
 
+/// <summary>Kết quả thao tác danh mục địa điểm GS1 (nghiệp vụ Mst_GLN).</summary>
+public record GlnResult(bool Ok, string Message, int Id, string Code);
+
 /// <summary>Kết quả lưu sự kiện truy xuất GS1 (nghiệp vụ Event_Event_Save).</summary>
 public record TraceEventResult(bool Ok, string Message, int Id, string EventNo, string Action);
 
@@ -104,6 +107,12 @@ public interface IStampService
     Task<OriginResult> CreateOriginAsync(OriginCatalog o, string createdBy);
     Task<OriginResult> UpdateOriginAsync(int id, OriginCatalog o);
     Task<OriginResult> DeleteOriginAsync(int id);
+    // danh mục địa điểm GS1 (Mst_GLN)
+    Task<List<Gs1Location>> Gs1LocationsAsync(string? q);
+    Task<Gs1Location?> GetGs1LocationAsync(int id);
+    Task<GlnResult> CreateGs1LocationAsync(Gs1Location g, string createdBy);
+    Task<GlnResult> UpdateGs1LocationAsync(int id, Gs1Location g);
+    Task<GlnResult> DeleteGs1LocationAsync(int id);
     // truy xuất nguồn gốc GS1 (Mst_CTE / Mst_KDE / CTE_KDE / Event_Event)
     Task<List<TraceEventType>> TraceEventTypesAsync();
     Task<TraceEventType?> GetTraceEventTypeAsync(int id);
@@ -804,6 +813,89 @@ public class StampService(AppDbContext db) : IStampService
         var cert = string.Join(" ", new[] { o.CertificateCode, o.CertificateNo }
             .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         return string.IsNullOrWhiteSpace(cert) ? o.Code : $"{o.Code} ({cert})";
+    }
+
+    // ── DANH MỤC ĐỊA ĐIỂM GS1 (Mst_GLN) ────────────────────────────
+    /// <summary>
+    /// Danh sách địa điểm GS1. Nếu có từ khóa q → lọc theo Code/Name/OrgCode
+    /// (phục vụ Auto Complete, giống Ft_WhereClause của EQR).
+    /// </summary>
+    public async Task<List<Gs1Location>> Gs1LocationsAsync(string? q)
+    {
+        var query = db.Gs1Locations.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var k = q.Trim();
+            query = query.Where(x => x.Code.Contains(k) || x.Name.Contains(k) || (x.OrgCode != null && x.OrgCode.Contains(k)));
+        }
+        return await query.OrderBy(x => x.Code).Take(200).ToListAsync();
+    }
+
+    public Task<Gs1Location?> GetGs1LocationAsync(int id) =>
+        db.Gs1Locations.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo 1 địa điểm GS1. Mô phỏng nghiệp vụ Mst_GLN_Create_New20210408 của EQR:
+    /// - GLNCode bắt buộc và không được trùng (Mst_GLN_CheckDB_MstGLNExist).
+    /// - GLNName bắt buộc.
+    /// - OrgID (đơn vị sở hữu) bắt buộc.
+    /// </summary>
+    public async Task<GlnResult> CreateGs1LocationAsync(Gs1Location g, string createdBy)
+    {
+        g.Code = (g.Code ?? "").Trim();
+        g.Name = (g.Name ?? "").Trim();
+        g.OrgCode = string.IsNullOrWhiteSpace(g.OrgCode) ? null : g.OrgCode.Trim();
+        if (string.IsNullOrWhiteSpace(g.Code)) return new GlnResult(false, "Mã địa điểm GS1 (GLNCode) không được để trống.", 0, "");
+        if (string.IsNullOrWhiteSpace(g.Name)) return new GlnResult(false, "Tên địa điểm (GLNName) không được để trống.", 0, g.Code);
+        if (string.IsNullOrWhiteSpace(g.OrgCode)) return new GlnResult(false, "Đơn vị sở hữu (OrgID) không được để trống.", 0, g.Code);
+        if (await db.Gs1Locations.AnyAsync(x => x.Code == g.Code))
+            return new GlnResult(false, $"Mã địa điểm GS1 {g.Code} đã tồn tại.", 0, g.Code);
+
+        g.CreatedBy = createdBy;
+        db.Gs1Locations.Add(g);
+        await db.SaveChangesAsync();
+        return new GlnResult(true, $"Đã tạo địa điểm GS1 {g.Code}.", g.Id, g.Code);
+    }
+
+    /// <summary>
+    /// Cập nhật 1 địa điểm GS1. Mô phỏng nghiệp vụ Mst_GLN_Update_New20210408 của EQR:
+    /// - Bản ghi phải tồn tại (Mst_GLN_CheckDB_MstGLNNotFound).
+    /// - Nếu đổi tên thì tên không được rỗng.
+    /// - Đơn vị sở hữu phải tồn tại.
+    /// </summary>
+    public async Task<GlnResult> UpdateGs1LocationAsync(int id, Gs1Location g)
+    {
+        var cur = await db.Gs1Locations.FirstOrDefaultAsync(x => x.Id == id);
+        if (cur == null) return new GlnResult(false, "Không tìm thấy địa điểm GS1.", 0, "");
+
+        g.Name = (g.Name ?? "").Trim();
+        g.OrgCode = string.IsNullOrWhiteSpace(g.OrgCode) ? null : g.OrgCode.Trim();
+        if (string.IsNullOrWhiteSpace(g.Name)) return new GlnResult(false, "Tên địa điểm (GLNName) không được để trống.", cur.Id, cur.Code);
+        if (string.IsNullOrWhiteSpace(g.OrgCode)) return new GlnResult(false, "Đơn vị sở hữu (OrgID) không được để trống.", cur.Id, cur.Code);
+
+        cur.Name = g.Name;
+        cur.GpsLat = g.GpsLat;
+        cur.GpsLong = g.GpsLong;
+        cur.OrgCode = g.OrgCode;
+        cur.Remark = g.Remark;
+        cur.IsActive = g.IsActive;
+        cur.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync();
+        return new GlnResult(true, $"Đã cập nhật địa điểm GS1 {cur.Code}.", cur.Id, cur.Code);
+    }
+
+    /// <summary>
+    /// Xóa 1 địa điểm GS1. Mô phỏng nghiệp vụ Mst_GLN_Delete_New20210409 của EQR:
+    /// - Bản ghi phải tồn tại (Mst_GLN_CheckDB_MstGLNNotFound).
+    /// </summary>
+    public async Task<GlnResult> DeleteGs1LocationAsync(int id)
+    {
+        var cur = await db.Gs1Locations.FirstOrDefaultAsync(x => x.Id == id);
+        if (cur == null) return new GlnResult(false, "Không tìm thấy địa điểm GS1.", 0, "");
+
+        db.Gs1Locations.Remove(cur);
+        await db.SaveChangesAsync();
+        return new GlnResult(true, $"Đã xóa địa điểm GS1 {cur.Code}.", 0, cur.Code);
     }
 
     // ── TRUY XUẤT NGUỒN GỐC GS1 (Mst_CTE / Mst_KDE / CTE_KDE / Event_Event) ─

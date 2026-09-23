@@ -1,0 +1,42 @@
+@model List<Gs1Location>
+@{ ViewData["Title"] = "Danh mục địa điểm GS1"; var q = (string?)ViewBag.Q; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Danh mục địa điểm GS1 (Mst_GLN)</h6>
+        <a href="/Gs1Location/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm địa điểm</a>
+    </div>
+    <p class="text-muted small">Danh mục địa điểm chuẩn GS1 (Global Location Number) — nhà máy, kho, trang trại, điểm bán… dùng cho trường GLN ở sự kiện truy xuất và nguồn gốc.</p>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4"><input name="q" value="@q" class="form-control form-control-sm" placeholder="Tìm theo mã / tên / đơn vị sở hữu…" /></div>
+        <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Tìm</button></div>
+    </form>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã GLN</th><th>Tên địa điểm</th><th>Đơn vị sở hữu</th><th>Toạ độ GPS</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var g in Model)
+        {
+            <tr>
+                <td class="fw-semibold" style="font-family:monospace">@g.Code</td>
+                <td>@g.Name</td>
+                <td class="small text-muted">@(string.IsNullOrWhiteSpace(g.OrgCode) ? "—" : g.OrgCode)</td>
+                <td class="small text-muted">
+                    @if (!string.IsNullOrWhiteSpace(g.GpsLat) || !string.IsNullOrWhiteSpace(g.GpsLong))
+                    {
+                        @($"{g.GpsLat}, {g.GpsLong}")
+                    }
+                    else { <text>—</text> }
+                </td>
+                <td>@if (g.IsActive) { <span class="badge bg-success">Hoạt động</span> } else { <span class="badge bg-secondary">Ngừng</span> }</td>
+                <td class="text-end">
+                    <a href="/Gs1Location/Edit/@g.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                    <form asp-action="Delete" asp-route-id="@g.Id" method="post" class="d-inline" onsubmit="return confirm('Xóa địa điểm @g.Code?');">
+                        @Html.AntiForgeryToken()
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có địa điểm GS1 nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

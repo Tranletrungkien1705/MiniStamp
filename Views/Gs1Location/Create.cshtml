@@ -1,0 +1,24 @@
+@model Gs1Location
+@{ ViewData["Title"] = "Thêm địa điểm GS1"; }
+<div class="card" style="max-width:860px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã địa điểm GS1 (GLNCode) <span class="text-danger">*</span></label><input name="code" value="@Model?.Code" class="form-control" placeholder="VD: 8930000000001" /></div>
+            <div class="col-md-8"><label class="form-label small text-muted">Tên địa điểm (GLNName) <span class="text-danger">*</span></label><input name="name" value="@Model?.Name" class="form-control" placeholder="VD: Nhà máy Supe Lâm Thao" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Vĩ độ (GPSLat)</label><input name="gpsLat" value="@Model?.GpsLat" class="form-control" placeholder="VD: 21.3221" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Kinh độ (GPSLong)</label><input name="gpsLong" value="@Model?.GpsLong" class="form-control" placeholder="VD: 105.4012" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Đơn vị sở hữu (OrgID) <span class="text-danger">*</span></label><input name="orgCode" value="@Model?.OrgCode" class="form-control" placeholder="VD: ORG01" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-8"><label class="form-label small text-muted">Ghi chú</label><input name="remark" value="@Model?.Remark" class="form-control" /></div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="isActive" value="true" checked /><label class="form-check-label small">Đang hoạt động</label></div>
+            </div>
+        </div>
+        <div class="alert alert-light border small mb-3"><i class="bi bi-info-circle me-1"></i>Mã GLN bắt buộc và không được trùng; tên địa điểm và đơn vị sở hữu bắt buộc.</div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Lưu</button> <a href="/Gs1Location" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

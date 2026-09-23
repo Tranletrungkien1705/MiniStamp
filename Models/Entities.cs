@@ -419,6 +419,33 @@ public class OriginCatalog : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
+// ── Danh mục địa điểm GS1 (Mst_GLN) — master data truy xuất nguồn gốc ─
+// Nghiệp vụ EQR (WAS_Mst_GLN_Create_New20210408 / _Update_New20210408 /
+// _Delete_New20210409 / _Get, file eTEMTruyXuat/eTemNN.cs): danh mục địa điểm
+// chuẩn GS1 (Global Location Number) — nhà máy, kho, trang trại, điểm bán…
+// dùng cho trường GLNOrgCode ở sự kiện truy xuất và GlnCode ở nguồn gốc.
+// Ràng buộc EQR:
+//  - GLNCode bắt buộc + duy nhất (Mst_GLN_CheckDB_MstGLNExist khi tạo).
+//  - GLNName bắt buộc.
+//  - OrgID bắt buộc và phải tồn tại (Mst_Org_CheckDB).
+//  - Khi sửa: bản ghi phải tồn tại; nếu đổi tên thì tên không được rỗng.
+//  - Khi xóa: bản ghi phải tồn tại.
+public class Gs1Location : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";        // GLNCode — mã địa điểm GS1 (duy nhất trong tenant)
+    public string Name { get; set; } = "";        // GLNName — tên địa điểm
+    public string? GpsLat { get; set; }            // GPSLat — vĩ độ
+    public string? GpsLong { get; set; }           // GPSLong — kinh độ
+    public string? OrgCode { get; set; }           // OrgID — đơn vị/tổ chức sở hữu địa điểm
+    public string? Remark { get; set; }
+    public bool IsActive { get; set; } = true;     // FlagActive
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+}
+
 // ── Hóa đơn điện tử (Invoice_Invoice) — nghiệp vụ bước (8) vòng đời tem ─
 // EQR: hóa đơn điện tử kế thừa hệ TVAN (Invoice_Invoice + Dtl), cấp số từ
 // "mẫu hóa đơn" (Invoice_TempInvoice) có dải số StartInvoiceNo..EndInvoiceNo.

@@ -445,6 +445,63 @@ public class OriginController(IStampService svc) : Controller
     }
 }
 
+// Danh mục địa điểm GS1 (nghiệp vụ Mst_GLN của EQR)
+public class Gs1LocationController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q)
+    {
+        ViewBag.Q = q;
+        return View(await svc.Gs1LocationsAsync(q));
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? code, string? name, string? gpsLat, string? gpsLong,
+        string? orgCode, string? remark, bool isActive)
+    {
+        var g = new Gs1Location
+        {
+            Code = code ?? "", Name = name ?? "", GpsLat = gpsLat, GpsLong = gpsLong,
+            OrgCode = orgCode, Remark = remark, IsActive = isActive
+        };
+        var r = await svc.CreateGs1LocationAsync(g, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View(g);
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var g = await svc.GetGs1LocationAsync(id);
+        if (g == null) return NotFound();
+        return View(g);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, string? name, string? gpsLat, string? gpsLong,
+        string? orgCode, string? remark, bool isActive)
+    {
+        var g = new Gs1Location
+        {
+            Name = name ?? "", GpsLat = gpsLat, GpsLong = gpsLong,
+            OrgCode = orgCode, Remark = remark, IsActive = isActive
+        };
+        var r = await svc.UpdateGs1LocationAsync(id, g);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { g.Id = id; g.Code = r.Code; return View(g); }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var r = await svc.DeleteGs1LocationAsync(id);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Truy xuất nguồn gốc GS1 (nghiệp vụ Mst_CTE / Mst_KDE / CTE_KDE / Event_Event của EQR)
 public class TraceController(IStampService svc) : Controller
 {

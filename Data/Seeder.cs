@@ -180,6 +180,20 @@ public static class Seeder
                 });
             await db.SaveChangesAsync();
 
+            // Danh mục địa điểm GS1 mẫu (Mst_GLN) — dùng cho trường GLN ở sự kiện truy xuất / nguồn gốc
+            db.Gs1Locations.AddRange(
+                new Gs1Location
+                {
+                    Code = "8930000000001", Name = "Nhà máy Supe Lâm Thao", GpsLat = "21.3221", GpsLong = "105.4012",
+                    OrgCode = "ORG01", Remark = "Địa điểm sản xuất chính", CreatedBy = "seed"
+                },
+                new Gs1Location
+                {
+                    Code = "8930000000002", Name = "Kho thành phẩm Việt Trì", GpsLat = "21.3010", GpsLong = "105.4300",
+                    OrgCode = "ORG01", Remark = "Kho lưu trữ thành phẩm", CreatedBy = "seed"
+                });
+            await db.SaveChangesAsync();
+
             // Danh mục truy xuất GS1 (Mst_CTE / Mst_KDE / CTE_KDE) — master data cho màn Sự kiện truy xuất
             var cteHarvest = new TraceEventType { Code = "HARVEST", Name = "Thu hoạch", TplVECode = "TPL-HARVEST", TplVEDetail = "Mẫu hiển thị sự kiện thu hoạch", CreatedBy = "seed" };
             var ctePack = new TraceEventType { Code = "PACKING", Name = "Đóng gói", TplVECode = "TPL-PACKING", TplVEDetail = "Mẫu hiển thị sự kiện đóng gói", CreatedBy = "seed" };
@@ -251,7 +265,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
