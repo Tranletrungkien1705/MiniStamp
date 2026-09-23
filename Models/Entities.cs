@@ -296,6 +296,61 @@ public class NeutralStamp : IOrgOwned
     public string? ResolvedBy { get; set; }
 }
 
+// ── Yêu cầu xuất kho (InvF_ReqInvOut) — nghiệp vụ EQR ────────────────
+// Nghiệp vụ EQR (worker LIVE WAS_InvF_ReqInvOut_Save / _Approve,
+// file InventoryForm.cs): phiếu YÊU CẦU xuất kho do người dùng lập (theo
+// mặt hàng + số lượng), chờ duyệt rồi mới gắn với 1 phiếu xuất kho theo tem
+// (Inv_VerifiedIDInOut). Vòng đời: PENDING → APPROVE (có thể bỏ duyệt về PENDING).
+// Ràng buộc EQR:
+//  - ReqInvOutNo bắt buộc (mã hệ thống sinh).
+//  - RefNo (số yêu cầu) bắt buộc + duy nhất trong tenant.
+//  - Phải có ít nhất 1 dòng mặt hàng; mọi mặt hàng phải tồn tại.
+//  - Chỉ phiếu PENDING mới sửa/duyệt được; chỉ phiếu APPROVE mới bỏ duyệt được.
+//  - Khi duyệt: IVerifiedIDInOutNo (phiếu xuất theo tem) không được trùng phiếu khác.
+public class ReqInvOut : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ReqInvOutNo { get; set; } = "";   // mã yêu cầu xuất kho (duy nhất trong tenant)
+    public string RefNo { get; set; } = "";          // số yêu cầu (người dùng nhập, duy nhất trong tenant)
+    public string? InvCode { get; set; }              // mã kho
+    public string? InvOutType { get; set; }           // mã loại xuất kho
+    public DateTime InvOutDate { get; set; } = DateTime.Today;  // ngày xuất
+    public string? TransportType { get; set; }        // loại phương tiện
+    public string? VehicleNumber { get; set; }        // biển số xe
+    public string ReqStatus { get; set; } = "PENDING"; // PENDING / APPROVE
+    public string? CustomerCodeSys { get; set; }      // mã khách hàng (mã hệ thống)
+    public string? ReceiveAddress { get; set; }       // địa điểm nhận hàng
+    public string? IVerifiedIDInOutNo { get; set; }   // phiếu xuất kho theo tem gắn khi duyệt
+    public string? QRCodeOS { get; set; }
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+
+    public List<ReqInvOutDtl> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết yêu cầu xuất kho (1 mặt hàng + số lượng) ───────────
+public class ReqInvOutDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ReqInvOutId { get; set; }
+    public int ProductId { get; set; }
+    public string ProductCode { get; set; } = "";    // mã mặt hàng (Product.Code)
+    public string? UnitCode { get; set; }              // đơn vị tính
+    public int Qty { get; set; }                       // số lượng
+    public int QtyId { get; set; }                     // số bao
+    public bool FlagDiscount { get; set; }             // cờ khuyến mãi
+    public string? Remark { get; set; }
+    public string? QRCodeOS { get; set; }
+
+    public ReqInvOut ReqInvOut { get; set; } = null!;
+    public Product Product { get; set; } = null!;
+}
+
 // ── Loại Block (Mst_BlockType) — master data cho nghiệp vụ Map_Block ──
 // Nghiệp vụ EQR (bảng Mst_BlockType, worker Mst_BlockType_CheckDB, file
 // Master.cs): danh mục loại Block quy định BlockSize (số tem/hộp tối đa

@@ -56,6 +56,9 @@ public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int Q
 /// <summary>Kết quả rà soát tem trung tính (nghiệp vụ Inv_InventoryNeutralID).</summary>
 public record NeutralResult(bool Ok, string Message, int Detected, int Inserted);
 
+/// <summary>Kết quả thao tác yêu cầu xuất kho (nghiệp vụ InvF_ReqInvOut).</summary>
+public record ReqInvOutResult(bool Ok, string Message, int Id, string ReqInvOutNo, string Status);
+
 /// <summary>Kết quả kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate).</summary>
 public record WarrantyResult(bool Ok, string Message, int Id, string QrId, string WarrantyNo,
     DateTime WarrantyDateStart, bool IsFirstActivate, int WarrantyCount);
@@ -154,6 +157,13 @@ public interface IStampService
     Task<NeutralStamp?> GetNeutralStampAsync(int id);
     Task<NeutralResult> DetectSuspectStampsAsync(string createdBy);
     Task<NeutralResult> ResolveNeutralStampAsync(int id, string? note, string resolvedBy);
+    // yêu cầu xuất kho (InvF_ReqInvOut)
+    Task<List<ReqInvOut>> ReqInvOutsAsync();
+    Task<ReqInvOut?> GetReqInvOutAsync(int id);
+    Task<ReqInvOutResult> CreateReqInvOutAsync(ReqInvOut header, IEnumerable<(int ProductId, int Qty, string? UnitCode, bool FlagDiscount, string? Remark)> lines, string createdBy);
+    Task<ReqInvOutResult> ApproveReqInvOutAsync(int id, string? iVerifiedIDInOutNo, string approvedBy);
+    Task<ReqInvOutResult> UnApproveReqInvOutAsync(int id, string unApprovedBy);
+    Task<ReqInvOutResult> DeleteReqInvOutAsync(int id);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -1388,6 +1398,152 @@ public class StampService(AppDbContext db) : IStampService
         n.ResolvedBy = resolvedBy;
         await db.SaveChangesAsync();
         return new NeutralResult(true, $"Đã xác nhận tem {n.QrId} là trung tính.", 0, 0);
+    }
+
+    // ── YÊU CẦU XUẤT KHO (InvF_ReqInvOut) ───────────────────────────
+    public Task<List<ReqInvOut>> ReqInvOutsAsync() =>
+        db.ReqInvOuts.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<ReqInvOut?> GetReqInvOutAsync(int id) =>
+        db.ReqInvOuts.Include(x => x.Lines).ThenInclude(l => l.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo/cập nhật 1 phiếu yêu cầu xuất kho. Mô phỏng nghiệp vụ
+    /// WAS_InvF_ReqInvOut_Save của EQR (InventoryForm.cs):
+    /// - ReqInvOutNo bắt buộc (để trống ⇒ tự sinh).
+    /// - RefNo (số yêu cầu) bắt buộc + duy nhất trong tenant.
+    /// - Phải có ít nhất 1 dòng mặt hàng SL > 0; mọi mặt hàng phải tồn tại.
+    /// - Phiếu mới ở trạng thái PENDING; nếu mã đã tồn tại thì chỉ sửa được khi đang PENDING.
+    /// </summary>
+    public async Task<ReqInvOutResult> CreateReqInvOutAsync(ReqInvOut header,
+        IEnumerable<(int ProductId, int Qty, string? UnitCode, bool FlagDiscount, string? Remark)> lines, string createdBy)
+    {
+        var rows = (lines ?? []).Where(l => l.ProductId > 0 && l.Qty > 0).ToList();
+        if (rows.Count == 0) return new ReqInvOutResult(false, "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0.", 0, "", "");
+
+        header.RefNo = (header.RefNo ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(header.RefNo))
+            return new ReqInvOutResult(false, "Số yêu cầu (RefNo) không được để trống.", 0, "", "");
+
+        var productIds = rows.Select(r => r.ProductId).Distinct().ToList();
+        var products = await db.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+        var bad = productIds.Except(products.Select(p => p.Id)).ToList();
+        if (bad.Count > 0) return new ReqInvOutResult(false, $"Mặt hàng không tồn tại: {string.Join(", ", bad)}", 0, "", "");
+        var codeById = products.ToDictionary(p => p.Id, p => p.Code);
+
+        if (string.IsNullOrWhiteSpace(header.ReqInvOutNo)) header.ReqInvOutNo = $"YCXK{DateTime.Now:yyMMddHHmmss}";
+        header.ReqInvOutNo = header.ReqInvOutNo.Trim();
+
+        var existing = await db.ReqInvOuts.Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.ReqInvOutNo == header.ReqInvOutNo);
+        if (existing != null)
+        {
+            // sửa: chỉ cho phép khi đang PENDING (đúng ràng buộc InvF_ReqInvOut_Save_InvalidReqStatus)
+            if (existing.ReqStatus != "PENDING")
+                return new ReqInvOutResult(false, $"Phiếu {existing.ReqInvOutNo} đang ở trạng thái {existing.ReqStatus}, không thể sửa.", existing.Id, existing.ReqInvOutNo, existing.ReqStatus);
+            if (await db.ReqInvOuts.AnyAsync(x => x.RefNo == header.RefNo && x.Id != existing.Id))
+                return new ReqInvOutResult(false, $"Số yêu cầu {header.RefNo} đã được dùng ở phiếu khác.", existing.Id, existing.ReqInvOutNo, existing.ReqStatus);
+
+            db.ReqInvOutDtls.RemoveRange(existing.Lines);
+            existing.Lines.Clear();
+            existing.RefNo = header.RefNo;
+            existing.InvCode = header.InvCode;
+            existing.InvOutType = header.InvOutType;
+            existing.InvOutDate = header.InvOutDate == default ? DateTime.Today : header.InvOutDate;
+            existing.TransportType = header.TransportType;
+            existing.VehicleNumber = header.VehicleNumber;
+            existing.CustomerCodeSys = header.CustomerCodeSys;
+            existing.ReceiveAddress = header.ReceiveAddress;
+            existing.QRCodeOS = header.QRCodeOS;
+            existing.Remark = header.Remark;
+            foreach (var r in rows)
+                existing.Lines.Add(new ReqInvOutDtl
+                {
+                    ProductId = r.ProductId, ProductCode = codeById[r.ProductId],
+                    Qty = r.Qty, UnitCode = r.UnitCode, FlagDiscount = r.FlagDiscount, Remark = r.Remark
+                });
+            await db.SaveChangesAsync();
+            return new ReqInvOutResult(true, $"Đã cập nhật yêu cầu xuất kho {existing.ReqInvOutNo} ({rows.Count} dòng).", existing.Id, existing.ReqInvOutNo, existing.ReqStatus);
+        }
+
+        if (await db.ReqInvOuts.AnyAsync(x => x.RefNo == header.RefNo))
+            return new ReqInvOutResult(false, $"Số yêu cầu {header.RefNo} đã tồn tại.", 0, "", "");
+
+        header.ReqStatus = "PENDING";
+        header.CreatedBy = createdBy;
+        if (header.InvOutDate == default) header.InvOutDate = DateTime.Today;
+        foreach (var r in rows)
+            header.Lines.Add(new ReqInvOutDtl
+            {
+                ProductId = r.ProductId, ProductCode = codeById[r.ProductId],
+                Qty = r.Qty, UnitCode = r.UnitCode, FlagDiscount = r.FlagDiscount, Remark = r.Remark
+            });
+        db.ReqInvOuts.Add(header);
+        await db.SaveChangesAsync();
+        return new ReqInvOutResult(true, $"Đã tạo yêu cầu xuất kho {header.ReqInvOutNo} ({rows.Count} dòng, {rows.Sum(r => r.Qty)} SP).", header.Id, header.ReqInvOutNo, header.ReqStatus);
+    }
+
+    /// <summary>
+    /// Duyệt phiếu yêu cầu xuất kho. Mô phỏng nghiệp vụ
+    /// WAS_InvF_ReqInvOut_Approve của EQR:
+    /// - Chỉ phiếu PENDING mới duyệt được.
+    /// - Gắn IVerifiedIDInOutNo (phiếu xuất theo tem); số này không được trùng phiếu khác.
+    /// - Duyệt xong: ReqStatus = APPROVE + ghi mốc/người duyệt.
+    /// </summary>
+    public async Task<ReqInvOutResult> ApproveReqInvOutAsync(int id, string? iVerifiedIDInOutNo, string approvedBy)
+    {
+        var r = await db.ReqInvOuts.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (r == null) return new ReqInvOutResult(false, "Không tìm thấy yêu cầu xuất kho.", 0, "", "");
+        if (r.ReqStatus != "PENDING")
+            return new ReqInvOutResult(false, $"Phiếu {r.ReqInvOutNo} đang ở trạng thái {r.ReqStatus}, không thể duyệt.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+
+        var ivNo = string.IsNullOrWhiteSpace(iVerifiedIDInOutNo) ? null : iVerifiedIDInOutNo.Trim();
+        if (ivNo != null && await db.ReqInvOuts.AnyAsync(x => x.IVerifiedIDInOutNo == ivNo && x.Id != r.Id))
+            return new ReqInvOutResult(false, $"Phiếu xuất theo tem {ivNo} đã gắn với yêu cầu khác.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+
+        r.ReqStatus = "APPROVE";
+        r.IVerifiedIDInOutNo = ivNo;
+        r.ApprovedAt = DateTime.Now;
+        r.ApprovedBy = approvedBy;
+        await db.SaveChangesAsync();
+        return new ReqInvOutResult(true, $"Đã duyệt yêu cầu xuất kho {r.ReqInvOutNo}.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+    }
+
+    /// <summary>
+    /// Bỏ duyệt phiếu yêu cầu xuất kho (đưa về PENDING). Mô phỏng nhánh
+    /// FlagIsUnApprove của WAS_InvF_ReqInvOut_Approve: chỉ phiếu APPROVE mới bỏ duyệt được;
+    /// xóa liên kết IVerifiedIDInOutNo + mốc duyệt.
+    /// </summary>
+    public async Task<ReqInvOutResult> UnApproveReqInvOutAsync(int id, string unApprovedBy)
+    {
+        var r = await db.ReqInvOuts.FirstOrDefaultAsync(x => x.Id == id);
+        if (r == null) return new ReqInvOutResult(false, "Không tìm thấy yêu cầu xuất kho.", 0, "", "");
+        if (r.ReqStatus != "APPROVE")
+            return new ReqInvOutResult(false, $"Phiếu {r.ReqInvOutNo} đang ở trạng thái {r.ReqStatus}, không thể bỏ duyệt.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+
+        r.ReqStatus = "PENDING";
+        r.IVerifiedIDInOutNo = null;
+        r.ApprovedAt = null;
+        r.ApprovedBy = null;
+        await db.SaveChangesAsync();
+        return new ReqInvOutResult(true, $"Đã bỏ duyệt yêu cầu xuất kho {r.ReqInvOutNo}.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+    }
+
+    /// <summary>
+    /// Xóa phiếu yêu cầu xuất kho. Mô phỏng nhánh FlagIsDelete của
+    /// WAS_InvF_ReqInvOut_Save: chỉ xóa được phiếu PENDING.
+    /// </summary>
+    public async Task<ReqInvOutResult> DeleteReqInvOutAsync(int id)
+    {
+        var r = await db.ReqInvOuts.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (r == null) return new ReqInvOutResult(false, "Không tìm thấy yêu cầu xuất kho.", 0, "", "");
+        if (r.ReqStatus != "PENDING")
+            return new ReqInvOutResult(false, $"Phiếu {r.ReqInvOutNo} đang ở trạng thái {r.ReqStatus}, không thể xóa.", r.Id, r.ReqInvOutNo, r.ReqStatus);
+
+        db.ReqInvOuts.Remove(r);
+        await db.SaveChangesAsync();
+        return new ReqInvOutResult(true, $"Đã xóa yêu cầu xuất kho {r.ReqInvOutNo}.", 0, r.ReqInvOutNo, "");
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

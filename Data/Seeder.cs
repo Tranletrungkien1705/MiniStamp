@@ -300,6 +300,21 @@ public static class Seeder
             db.Invoices.Add(inv);
             await db.SaveChangesAsync();
 
+            // 1 yêu cầu xuất kho mẫu (InvF_ReqInvOut) — đã duyệt, gắn phiếu xuất theo tem
+            var req = new ReqInvOut
+            {
+                ReqInvOutNo = "YCXK-SEED-001", RefNo = "YC-SEED-001", InvCode = "KHO01",
+                InvOutType = "THUONGMAI", InvOutDate = DateTime.Today.AddDays(-2),
+                TransportType = "Đường bộ", VehicleNumber = "29C-123.45",
+                CustomerCodeSys = "KH001", ReceiveAddress = "Kho đại lý Phú Thọ",
+                IVerifiedIDInOutNo = "PXK-SEED-001", Remark = "Yêu cầu xuất lô mẫu",
+                CreatedBy = "seed", ReqStatus = "APPROVE", ApprovedAt = DateTime.Now.AddDays(-2), ApprovedBy = "seed"
+            };
+            req.Lines.Add(new ReqInvOutDtl { ProductId = p1.Id, ProductCode = p1.Code, UnitCode = "Bao", Qty = 300 });
+            req.Lines.Add(new ReqInvOutDtl { ProductId = p2.Id, ProductCode = p2.Code, UnitCode = "Chai", Qty = 120, FlagDiscount = true });
+            db.ReqInvOuts.Add(req);
+            await db.SaveChangesAsync();
+
             // 1 lượt kích hoạt bảo hành bằng PIN mẫu (WarrantyDateStartFromPIN_Activate)
             // — kích hoạt tem đầu tiên của lô (đã có PIN) để demo màn Kích hoạt bảo hành
             var wStamp = batch.Stamps.First();
@@ -325,7 +340,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

@@ -45,6 +45,8 @@ public class AppDbContext : DbContext
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<BlockLine> BlockLines => Set<BlockLine>();
     public DbSet<NeutralStamp> NeutralStamps => Set<NeutralStamp>();
+    public DbSet<ReqInvOut> ReqInvOuts => Set<ReqInvOut>();
+    public DbSet<ReqInvOutDtl> ReqInvOutDtls => Set<ReqInvOutDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -230,6 +232,18 @@ public class AppDbContext : DbContext
         b.Entity<NeutralStamp>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.QrId }).IsUnique();   // 1 tem chỉ có 1 bản ghi trung tính
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ReqInvOut>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ReqInvOutNo }).IsUnique();   // mã yêu cầu duy nhất trong tenant
+            e.HasIndex(x => new { x.OrgId, x.RefNo }).IsUnique();          // số yêu cầu duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ReqInvOutDtl>(e =>
+        {
+            e.HasOne(x => x.ReqInvOut).WithMany(x => x.Lines).HasForeignKey(x => x.ReqInvOutId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

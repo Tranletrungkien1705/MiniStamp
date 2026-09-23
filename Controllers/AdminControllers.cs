@@ -722,6 +722,80 @@ public class SalesActivationController(IStampService svc) : Controller
     }
 }
 
+// Yêu cầu xuất kho (nghiệp vụ InvF_ReqInvOut của EQR)
+public class ReqInvOutController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ReqInvOutsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? reqInvOutNo, string? refNo, string? invCode, string? invOutType,
+        DateTime invOutDate, string? transportType, string? vehicleNumber, string? customerCodeSys,
+        string? receiveAddress, string? remark,
+        int[]? productId, int[]? qty, string[]? unitCode, bool[]? flagDiscount, string[]? lineRemark)
+    {
+        var products = await svc.ProductsAsync();
+        var lines = new List<(int, int, string?, bool, string?)>();
+        if (productId != null)
+            for (int i = 0; i < productId.Length; i++)
+            {
+                var q = (qty != null && i < qty.Length) ? qty[i] : 0;
+                var uc = (unitCode != null && i < unitCode.Length) ? unitCode[i] : null;
+                var fd = (flagDiscount != null && i < flagDiscount.Length) && flagDiscount[i];
+                var lr = (lineRemark != null && i < lineRemark.Length) ? lineRemark[i] : null;
+                if (productId[i] > 0 && q > 0) lines.Add((productId[i], q, uc, fd, lr));
+            }
+        if (lines.Count == 0) { TempData["Error"] = "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0."; ViewBag.Products = products; return View(); }
+
+        var header = new ReqInvOut
+        {
+            ReqInvOutNo = reqInvOutNo ?? "", RefNo = refNo ?? "", InvCode = invCode, InvOutType = invOutType,
+            InvOutDate = invOutDate, TransportType = transportType, VehicleNumber = vehicleNumber,
+            CustomerCodeSys = customerCodeSys, ReceiveAddress = receiveAddress, Remark = remark
+        };
+        var r = await svc.CreateReqInvOutAsync(header, lines, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = products; return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var r = await svc.GetReqInvOutAsync(id);
+        if (r == null) return NotFound();
+        return View(r);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? iVerifiedIDInOutNo)
+    {
+        var r = await svc.ApproveReqInvOutAsync(id, iVerifiedIDInOutNo, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UnApprove(int id)
+    {
+        var r = await svc.UnApproveReqInvOutAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var r = await svc.DeleteReqInvOutAsync(id);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate của EQR)
 public class WarrantyController(IStampService svc) : Controller
 {

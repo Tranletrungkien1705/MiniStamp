@@ -1,0 +1,78 @@
+@model ReqInvOut
+@{
+    ViewData["Title"] = $"Yêu cầu xuất kho {Model.ReqInvOutNo}";
+    var total = Model.Lines.Sum(l => l.Qty);
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Yêu cầu xuất kho <span style="font-family:monospace">@Model.ReqInvOutNo</span></h5>
+            <div class="text-muted small">
+                Số yêu cầu <b>@Model.RefNo</b> · @Model.Lines.Count dòng · tổng <b>@total.ToString("N0")</b> SP · tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+            </div>
+            <div class="text-muted small">
+                @if (!string.IsNullOrWhiteSpace(Model.InvCode)) { <span>Kho: @Model.InvCode · </span> }
+                @if (!string.IsNullOrWhiteSpace(Model.InvOutType)) { <span>Loại xuất: @Model.InvOutType · </span> }
+                <span>Ngày xuất: @Model.InvOutDate.ToString("dd/MM/yyyy")</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.VehicleNumber) || !string.IsNullOrWhiteSpace(Model.TransportType))
+            {
+                <div class="text-muted small">Vận chuyển: @Model.TransportType @Model.VehicleNumber</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerCodeSys) || !string.IsNullOrWhiteSpace(Model.ReceiveAddress))
+            {
+                <div class="text-muted small">Nhận hàng: @Model.CustomerCodeSys @Model.ReceiveAddress</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.IVerifiedIDInOutNo)) { <div class="text-muted small">Phiếu xuất theo tem: <b>@Model.IVerifiedIDInOutNo</b></div> }
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+            @if (Model.ApprovedAt != null) { <div class="text-muted small">Duyệt lúc @Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ApprovedBy</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            @if (Model.ReqStatus == "APPROVE") { <span class="badge bg-success">APPROVE</span> }
+            else { <span class="badge bg-warning text-dark">PENDING</span> }
+            @if (Model.ReqStatus == "PENDING")
+            {
+                <form asp-action="Approve" asp-route-id="@Model.Id" method="post" class="d-flex gap-1">
+                    @Html.AntiForgeryToken()
+                    <input name="iVerifiedIDInOutNo" class="form-control form-control-sm" style="width:170px" placeholder="Mã phiếu xuất theo tem" />
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2-circle me-1"></i>Duyệt</button>
+                </form>
+                <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Xóa yêu cầu này?')">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+                </form>
+            }
+            else
+            {
+                <form asp-action="UnApprove" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ duyệt</button>
+                </form>
+            }
+            <a href="/ReqInvOut" class="btn btn-sm btn-outline-primary">Danh sách yêu cầu</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Chi tiết yêu cầu</h6>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Mặt hàng</th><th>Đơn vị</th><th class="text-end">Số lượng</th><th>KM</th><th>Ghi chú</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td>@l.ProductCode — @l.Product?.Name</td>
+                <td class="small text-muted">@l.UnitCode</td>
+                <td class="text-end">@l.Qty.ToString("N0")</td>
+                <td>@(l.FlagDiscount ? "✓" : "")</td>
+                <td class="small text-muted">@l.Remark</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot><tr><th colspan="3" class="text-end">Tổng</th><th class="text-end">@total.ToString("N0")</th><th colspan="2"></th></tr></tfoot>
+    </table>
+</div></div>
