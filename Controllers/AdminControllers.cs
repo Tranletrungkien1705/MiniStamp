@@ -796,6 +796,31 @@ public class ReqInvOutController(IStampService svc) : Controller
     }
 }
 
+// Vòng đời tem theo kỳ tháng (nghiệp vụ InvIVID_LifeCircleIDNoByPeriod của EQR)
+public class LifecycleController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.LifecyclePeriodsAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(DateTime periodMonth, string? remark)
+    {
+        if (periodMonth == default) { TempData["Error"] = "Chọn kỳ tháng cần chốt."; return View(); }
+        var r = await svc.SnapshotLifecycleAsync(periodMonth, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetLifecyclePeriodAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+}
+
 // Kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate của EQR)
 public class WarrantyController(IStampService svc) : Controller
 {

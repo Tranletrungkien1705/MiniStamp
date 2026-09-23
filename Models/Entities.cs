@@ -689,6 +689,35 @@ public class WarrantyActivation : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
+// ── Vòng đời tem theo kỳ tháng (InvIVID_LifeCircleIDNoByPeriod) ──────
+// Nghiệp vụ EQR (worker LIVE WAS_InvIVID_LifeCircleIDNoByPeriod_Add,
+// file Template.cs): chốt 1 bản ghi "vòng đời tem" cho 1 KỲ THÁNG, gồm
+// 4 chỉ số đếm tem trong tháng + chênh lệch so với kỳ trước:
+//  - QtyVerifiedID: tem đã ghép sản phẩm (FlagMap='1', MapIDDTimeUTC trong kỳ).
+//  - QtySales:      tem đã kích hoạt bán hàng (FlagSales='1', InvOutDTime trong kỳ).
+//  - QtyWarranty:   tem đã kích hoạt bảo hành (FlagPIN='1', WarrantyDateStart trong kỳ).
+//  - QtySearch:     tem đã được tra cứu (SearchCount != 0, SearchLastDTimeUTC trong kỳ).
+// Delta* = chỉ số kỳ này − chỉ số kỳ trước (kỳ trước = PeriodMonth lớn nhất < kỳ này).
+// Ràng buộc EQR: PeriodMonth chuẩn hoá về ngày đầu tháng (yyyy-MM-01);
+// mỗi kỳ chỉ chốt 1 lần (chống trùng theo OrgId + PeriodMonth).
+public class StampLifecyclePeriod : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public DateTime PeriodMonth { get; set; } = new(DateTime.Today.Year, DateTime.Today.Month, 1); // kỳ tháng (ngày đầu tháng)
+    public int QtyVerifiedID { get; set; }   // tem đã ghép sản phẩm trong kỳ
+    public int QtySales { get; set; }        // tem đã kích hoạt bán hàng trong kỳ
+    public int QtyWarranty { get; set; }     // tem đã kích hoạt bảo hành trong kỳ
+    public int QtySearch { get; set; }       // tem đã được tra cứu trong kỳ
+    public int DeltaVerifiedID { get; set; } // chênh lệch so với kỳ trước
+    public int DeltaSales { get; set; }
+    public int DeltaWarranty { get; set; }
+    public int DeltaSearch { get; set; }
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {

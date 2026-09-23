@@ -333,6 +333,17 @@ public static class Seeder
                 WarrantyCount = 1, CreatedBy = "seed"
             });
             await db.SaveChangesAsync();
+
+            // 1 kỳ vòng đời tem mẫu (InvIVID_LifeCircleIDNoByPeriod) — chốt kỳ tháng trước
+            var prevPeriod = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
+            db.StampLifecyclePeriods.Add(new StampLifecyclePeriod
+            {
+                PeriodMonth = prevPeriod,
+                QtyVerifiedID = 30, QtySales = 3, QtyWarranty = 1, QtySearch = 0,
+                DeltaVerifiedID = 30, DeltaSales = 3, DeltaWarranty = 1, DeltaSearch = 0,
+                Remark = "Chốt số liệu vòng đời tem kỳ mẫu", CreatedBy = "seed"
+            });
+            await db.SaveChangesAsync();
         }
     }
 
@@ -340,7 +351,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

@@ -59,6 +59,10 @@ public record NeutralResult(bool Ok, string Message, int Detected, int Inserted)
 /// <summary>Kết quả thao tác yêu cầu xuất kho (nghiệp vụ InvF_ReqInvOut).</summary>
 public record ReqInvOutResult(bool Ok, string Message, int Id, string ReqInvOutNo, string Status);
 
+/// <summary>Kết quả chốt vòng đời tem theo kỳ tháng (nghiệp vụ InvIVID_LifeCircleIDNoByPeriod).</summary>
+public record LifecycleResult(bool Ok, string Message, int Id, DateTime PeriodMonth,
+    int QtyVerifiedID, int QtySales, int QtyWarranty, int QtySearch);
+
 /// <summary>Kết quả kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate).</summary>
 public record WarrantyResult(bool Ok, string Message, int Id, string QrId, string WarrantyNo,
     DateTime WarrantyDateStart, bool IsFirstActivate, int WarrantyCount);
@@ -173,6 +177,10 @@ public interface IStampService
         string? mapLatitude, string? mapLongitude);
     Task<List<WarrantyActivation>> WarrantyActivationsAsync(string? qrId);
     Task<WarrantyActivation?> GetWarrantyActivationAsync(int id);
+    // vòng đời tem theo kỳ tháng (InvIVID_LifeCircleIDNoByPeriod)
+    Task<List<StampLifecyclePeriod>> LifecyclePeriodsAsync();
+    Task<StampLifecyclePeriod?> GetLifecyclePeriodAsync(int id);
+    Task<LifecycleResult> SnapshotLifecycleAsync(DateTime periodMonth, string? remark, string createdBy);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -1705,4 +1713,63 @@ public class StampService(AppDbContext db) : IStampService
 
     private static string NewQrId()
         => Guid.NewGuid().ToString("N")[..12].ToUpperInvariant();   // 12 ký tự hex — ngắn gọn cho QR
+
+    // ── VÒNG ĐỜI TEM THEO KỲ THÁNG (InvIVID_LifeCircleIDNoByPeriod) ─
+    public Task<List<StampLifecyclePeriod>> LifecyclePeriodsAsync() =>
+        db.StampLifecyclePeriods.OrderByDescending(x => x.PeriodMonth).Take(500).ToListAsync();
+
+    public Task<StampLifecyclePeriod?> GetLifecyclePeriodAsync(int id) =>
+        db.StampLifecyclePeriods.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Chốt 1 bản ghi vòng đời tem cho 1 KỲ THÁNG. Mô phỏng nghiệp vụ
+    /// WAS_InvIVID_LifeCircleIDNoByPeriod_Add của EQR (Template.cs):
+    /// - Kỳ tháng chuẩn hoá về ngày đầu tháng (yyyy-MM-01); mỗi kỳ chỉ chốt 1 lần.
+    /// - Đếm 4 chỉ số tem trong kỳ: đã ghép SP (MapIDDTimeUTC), đã bán (SalesDTime),
+    ///   đã kích hoạt bảo hành (ActivatedAt), đã tra cứu (LastScanAt).
+    /// - Delta* = chỉ số kỳ này − chỉ số kỳ trước (kỳ trước = PeriodMonth lớn nhất < kỳ này).
+    /// </summary>
+    public async Task<LifecycleResult> SnapshotLifecycleAsync(DateTime periodMonth, string? remark, string createdBy)
+    {
+        // chuẩn hoá kỳ về ngày đầu tháng
+        var period = new DateTime(periodMonth.Year, periodMonth.Month, 1);
+        var from = period;
+        var to = period.AddMonths(1).AddTicks(-1);
+
+        if (await db.StampLifecyclePeriods.AnyAsync(x => x.PeriodMonth == period))
+            return new LifecycleResult(false, $"Kỳ tháng {period:MM/yyyy} đã được chốt trước đó.", 0, period, 0, 0, 0, 0);
+
+        // đếm tem trong kỳ (xuyên tenant theo OrgId hiện tại — dùng query filter mặc định)
+        var qtyVerified = await db.Stamps.CountAsync(x => x.BatchId != 0 && x.BoxedAt >= from && x.BoxedAt <= to);
+        var qtySales = await db.Stamps.CountAsync(x => x.FlagSales && x.SalesDTime >= from && x.SalesDTime <= to);
+        var qtyWarranty = await db.Stamps.CountAsync(x => x.ActivatedAt >= from && x.ActivatedAt <= to);
+        var qtySearch = await db.Stamps.CountAsync(x => x.ScanCount != 0 && x.LastScanAt >= from && x.LastScanAt <= to);
+
+        // kỳ trước = PeriodMonth lớn nhất < kỳ này (đúng EQR: select top 1 ... order by desc)
+        var prev = await db.StampLifecyclePeriods
+            .Where(x => x.PeriodMonth < period)
+            .OrderByDescending(x => x.PeriodMonth)
+            .FirstOrDefaultAsync();
+
+        var rec = new StampLifecyclePeriod
+        {
+            PeriodMonth = period,
+            QtyVerifiedID = qtyVerified,
+            QtySales = qtySales,
+            QtyWarranty = qtyWarranty,
+            QtySearch = qtySearch,
+            DeltaVerifiedID = qtyVerified - (prev?.QtyVerifiedID ?? 0),
+            DeltaSales = qtySales - (prev?.QtySales ?? 0),
+            DeltaWarranty = qtyWarranty - (prev?.QtyWarranty ?? 0),
+            DeltaSearch = qtySearch - (prev?.QtySearch ?? 0),
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+        db.StampLifecyclePeriods.Add(rec);
+        await db.SaveChangesAsync();
+
+        return new LifecycleResult(true,
+            $"Đã chốt vòng đời tem kỳ {period:MM/yyyy}: ghép SP {qtyVerified}, bán {qtySales}, bảo hành {qtyWarranty}, tra cứu {qtySearch}.",
+            rec.Id, period, qtyVerified, qtySales, qtyWarranty, qtySearch);
+    }
 }

@@ -1,0 +1,51 @@
+@model StampLifecyclePeriod
+@{ ViewData["Title"] = $"Vòng đời tem kỳ {Model.PeriodMonth:MM/yyyy}"; }
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Vòng đời tem — Tháng @Model.PeriodMonth.ToString("MM/yyyy")</h5>
+            <div class="text-muted small">Chốt lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy</div>
+        </div>
+        <a href="/Lifecycle" class="btn btn-sm btn-outline-primary align-self-start">Danh sách kỳ</a>
+    </div>
+</div></div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body">
+        <div class="small text-muted">Tem ghép sản phẩm</div>
+        <div class="stat-num">@Model.QtyVerifiedID</div>
+        <div class="small @(Model.DeltaVerifiedID >= 0 ? "text-success" : "text-danger")">Δ @(Model.DeltaVerifiedID >= 0 ? "+" : "")@Model.DeltaVerifiedID so với kỳ trước</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body">
+        <div class="small text-muted">Tem kích hoạt bán hàng</div>
+        <div class="stat-num">@Model.QtySales</div>
+        <div class="small @(Model.DeltaSales >= 0 ? "text-success" : "text-danger")">Δ @(Model.DeltaSales >= 0 ? "+" : "")@Model.DeltaSales so với kỳ trước</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body">
+        <div class="small text-muted">Tem kích hoạt bảo hành</div>
+        <div class="stat-num">@Model.QtyWarranty</div>
+        <div class="small @(Model.DeltaWarranty >= 0 ? "text-success" : "text-danger")">Δ @(Model.DeltaWarranty >= 0 ? "+" : "")@Model.DeltaWarranty so với kỳ trước</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body">
+        <div class="small text-muted">Tem được tra cứu</div>
+        <div class="stat-num">@Model.QtySearch</div>
+        <div class="small @(Model.DeltaSearch >= 0 ? "text-success" : "text-danger")">Δ @(Model.DeltaSearch >= 0 ? "+" : "")@Model.DeltaSearch so với kỳ trước</div>
+    </div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Chi tiết kỳ</h6>
+    <table class="table align-middle mb-0">
+        <thead><tr><th>Chỉ số</th><th class="text-end">Kỳ này</th><th class="text-end">Chênh lệch (Δ)</th></tr></thead>
+        <tbody>
+            <tr><td>Tem đã ghép sản phẩm</td><td class="text-end fw-semibold">@Model.QtyVerifiedID</td><td class="text-end @(Model.DeltaVerifiedID >= 0 ? "text-success" : "text-danger")">@(Model.DeltaVerifiedID >= 0 ? "+" : "")@Model.DeltaVerifiedID</td></tr>
+            <tr><td>Tem đã kích hoạt bán hàng</td><td class="text-end fw-semibold">@Model.QtySales</td><td class="text-end @(Model.DeltaSales >= 0 ? "text-success" : "text-danger")">@(Model.DeltaSales >= 0 ? "+" : "")@Model.DeltaSales</td></tr>
+            <tr><td>Tem đã kích hoạt bảo hành</td><td class="text-end fw-semibold">@Model.QtyWarranty</td><td class="text-end @(Model.DeltaWarranty >= 0 ? "text-success" : "text-danger")">@(Model.DeltaWarranty >= 0 ? "+" : "")@Model.DeltaWarranty</td></tr>
+            <tr><td>Tem đã được tra cứu</td><td class="text-end fw-semibold">@Model.QtySearch</td><td class="text-end @(Model.DeltaSearch >= 0 ? "text-success" : "text-danger")">@(Model.DeltaSearch >= 0 ? "+" : "")@Model.DeltaSearch</td></tr>
+        </tbody>
+    </table>
+    @if (!string.IsNullOrWhiteSpace(Model.Remark))
+    {
+        <div class="mt-3 text-muted small"><i class="bi bi-chat-left-text me-1"></i>@Model.Remark</div>
+    }
+</div></div>

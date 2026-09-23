@@ -47,6 +47,7 @@ public class AppDbContext : DbContext
     public DbSet<NeutralStamp> NeutralStamps => Set<NeutralStamp>();
     public DbSet<ReqInvOut> ReqInvOuts => Set<ReqInvOut>();
     public DbSet<ReqInvOutDtl> ReqInvOutDtls => Set<ReqInvOutDtl>();
+    public DbSet<StampLifecyclePeriod> StampLifecyclePeriods => Set<StampLifecyclePeriod>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -247,6 +248,11 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);
+        b.Entity<StampLifecyclePeriod>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PeriodMonth }).IsUnique();   // mỗi kỳ tháng chỉ chốt 1 lần
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
         b.Entity<WarrantyActivation>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.QrId });   // tra lịch sử kích hoạt theo tem

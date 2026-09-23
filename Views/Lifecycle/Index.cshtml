@@ -1,0 +1,38 @@
+@model List<StampLifecyclePeriod>
+@{ ViewData["Title"] = "Vòng đời tem theo kỳ"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h6 class="fw-bold mb-0">Vòng đời tem theo kỳ tháng</h6>
+        <a href="/Lifecycle/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Chốt kỳ mới</a>
+    </div>
+    <p class="text-muted small">Nghiệp vụ <b>InvIVID_LifeCircleIDNoByPeriod</b> (EQR): chốt 1 bản ghi vòng đời tem cho mỗi <b>kỳ tháng</b> — đếm số tem đã <b>ghép sản phẩm</b>, đã <b>kích hoạt bán hàng</b>, đã <b>kích hoạt bảo hành</b> và đã <b>tra cứu</b> trong kỳ, kèm chênh lệch so với kỳ trước.</p>
+
+    <table class="table table-hover align-middle">
+        <thead><tr>
+            <th>Kỳ tháng</th>
+            <th class="text-end">Ghép SP</th><th class="text-end">Δ</th>
+            <th class="text-end">Bán hàng</th><th class="text-end">Δ</th>
+            <th class="text-end">Bảo hành</th><th class="text-end">Δ</th>
+            <th class="text-end">Tra cứu</th><th class="text-end">Δ</th>
+            <th>Chốt lúc</th>
+        </tr></thead>
+        <tbody>
+        @foreach (var p in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Lifecycle/Detail/@p.Id'">
+                <td class="fw-semibold">Tháng @p.PeriodMonth.ToString("MM/yyyy")</td>
+                <td class="text-end fw-semibold">@p.QtyVerifiedID</td>
+                <td class="text-end small @(p.DeltaVerifiedID >= 0 ? "text-success" : "text-danger")">@(p.DeltaVerifiedID >= 0 ? "+" : "")@p.DeltaVerifiedID</td>
+                <td class="text-end fw-semibold">@p.QtySales</td>
+                <td class="text-end small @(p.DeltaSales >= 0 ? "text-success" : "text-danger")">@(p.DeltaSales >= 0 ? "+" : "")@p.DeltaSales</td>
+                <td class="text-end fw-semibold">@p.QtyWarranty</td>
+                <td class="text-end small @(p.DeltaWarranty >= 0 ? "text-success" : "text-danger")">@(p.DeltaWarranty >= 0 ? "+" : "")@p.DeltaWarranty</td>
+                <td class="text-end fw-semibold">@p.QtySearch</td>
+                <td class="text-end small @(p.DeltaSearch >= 0 ? "text-success" : "text-danger")">@(p.DeltaSearch >= 0 ? "+" : "")@p.DeltaSearch</td>
+                <td class="small text-muted">@p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="10" class="text-center text-muted py-4">Chưa chốt kỳ vòng đời nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
