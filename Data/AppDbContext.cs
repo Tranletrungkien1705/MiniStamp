@@ -22,6 +22,8 @@ public class AppDbContext : DbContext
     public DbSet<BrokenStampLine> BrokenStampLines => Set<BrokenStampLine>();
     public DbSet<InventoryInFG> InventoryInFGs => Set<InventoryInFG>();
     public DbSet<InventoryInFGDtl> InventoryInFGDtls => Set<InventoryInFGDtl>();
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -45,6 +47,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Batch).WithMany(x => x.Stamps).HasForeignKey(x => x.BatchId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasOne(x => x.Box).WithMany(x => x.Stamps).HasForeignKey(x => x.BoxId);
+            e.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Box>(e =>
@@ -80,6 +83,18 @@ public class AppDbContext : DbContext
         b.Entity<InventoryInFGDtl>(e =>
         {
             e.HasOne(x => x.InventoryInFG).WithMany(x => x.Lines).HasForeignKey(x => x.InventoryInFGId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Shipment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ShipmentNo }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ShipmentLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ xuất 1 lần
+            e.HasOne(x => x.Shipment).WithMany(x => x.Lines).HasForeignKey(x => x.ShipmentId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

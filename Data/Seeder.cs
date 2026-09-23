@@ -84,6 +84,27 @@ public static class Seeder
             fg.Lines.Add(new InventoryInFGDtl { ProductId = p3.Id, Qty = 200, ProductionDate = DateTime.Today.AddDays(-5) });
             db.InventoryInFGs.Add(fg);
             await db.SaveChangesAsync();
+
+            // 1 phiếu xuất kho theo tem mẫu (Inv_VerifiedIDInOut) — đã xuất 3 tem của lô
+            var ship = new Shipment
+            {
+                ShipmentNo = "PXK-SEED-001", CustomerCode = "KH001", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                CustomerAddress = "TP. Việt Trì, Phú Thọ", PlateNo = "29C-123.45", DriverName = "Nguyễn Văn A",
+                DriverPhoneNo = "0912345678", TransportType = "Đường bộ", ReceivePlace = "Kho đại lý Phú Thọ",
+                RefNoSys = "DH-SEED-001", RefType = "SALES", Remark = "Xuất bán lô mẫu",
+                CreatedBy = "seed", Status = "SHIPPED", ShippedAt = DateTime.Now, ShippedBy = "seed"
+            };
+            db.Shipments.Add(ship);
+            await db.SaveChangesAsync();
+            var shipThree = batch.Stamps.Skip(5).Take(3).ToList();
+            foreach (var s in shipThree)
+            {
+                ship.Lines.Add(new ShipmentLine { QrId = s.QrId, ProductId = s.ProductId, ShippedAt = DateTime.Now });
+                s.ShipmentId = ship.Id;
+                s.ShippedAt = DateTime.Now;
+                s.CustomerCode = ship.CustomerCode;
+            }
+            await db.SaveChangesAsync();
         }
     }
 
@@ -91,7 +112,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

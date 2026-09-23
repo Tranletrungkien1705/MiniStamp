@@ -1,0 +1,33 @@
+@{
+    ViewData["Title"] = "Tạo phiếu xuất kho";
+}
+<div class="card" style="max-width:900px"><div class="card-body">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">Mã phiếu xuất</label><input name="shipmentNo" class="form-control" placeholder="Để trống sẽ tự sinh" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Mã khách hàng</label><input name="customerCode" class="form-control" placeholder="VD: KH001" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Tên khách hàng</label><input name="customerName" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-6"><label class="form-label small text-muted">Địa chỉ khách</label><input name="customerAddress" class="form-control" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">Biển số xe</label><input name="plateNo" class="form-control" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">Số mooc</label><input name="moocNo" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-3"><label class="form-label small text-muted">Tài xế</label><input name="driverName" class="form-control" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">SĐT tài xế</label><input name="driverPhoneNo" class="form-control" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">Loại vận chuyển</label><input name="transportType" class="form-control" placeholder="VD: Đường bộ" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">Nơi nhận</label><input name="receivePlace" class="form-control" /></div>
+        </div>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><label class="form-label small text-muted">RefNoSys (đơn hàng nguồn)</label><input name="refNoSys" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">RefNo</label><input name="refNo" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">RefType</label><input name="refType" class="form-control" /></div>
+        </div>
+        <div class="mb-2"><label class="form-label small text-muted">Ghi chú</label><input name="remark" class="form-control" /></div>
+        <label class="form-label small text-muted">Danh sách mã tem xuất (mỗi dòng 1 mã, hoặc cách nhau bởi dấu phẩy/khoảng trắng)</label>
+        <textarea name="codes" class="form-control" rows="6" style="font-family:monospace" placeholder="Dán danh sách QrId tem cần xuất..."></textarea>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-box-arrow-up me-1"></i>Tạo phiếu xuất</button> <a href="/Shipment" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

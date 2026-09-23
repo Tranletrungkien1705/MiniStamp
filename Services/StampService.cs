@@ -23,6 +23,9 @@ public record BrokenResult(bool Ok, string Message, int BrokenStampId, string Bs
 /// <summary>Kết quả tạo/duyệt phiếu nhập kho thành phẩm (nghiệp vụ InvF_InventoryInFG).</summary>
 public record InvInResult(bool Ok, string Message, int Id, string InvInNo, int TotalQty);
 
+/// <summary>Kết quả tạo/xuất phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut).</summary>
+public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int TotalQty);
+
 public interface IStampService
 {
     // admin
@@ -52,6 +55,11 @@ public interface IStampService
     Task<InventoryInFG?> GetInventoryInFGAsync(int id);
     Task<InvInResult> CreateInventoryInFGAsync(string invInNo, string? remark, IEnumerable<(int ProductId, int Qty, DateTime ProductionDate)> lines, string createdBy);
     Task<InvInResult> ApproveInventoryInFGAsync(int id, string approvedBy);
+    // phiếu xuất kho theo tem (Inv_VerifiedIDInOut / OutGenInAndOut)
+    Task<List<Shipment>> ShipmentsAsync();
+    Task<Shipment?> GetShipmentAsync(int id);
+    Task<ShipResult> CreateShipmentAsync(Shipment header, IEnumerable<string> qrIds, string createdBy);
+    Task<ShipResult> ShipShipmentAsync(int id, string shippedBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -339,6 +347,85 @@ public class StampService(AppDbContext db) : IStampService
         fg.ApprovedBy = approvedBy;
         await db.SaveChangesAsync();
         return new InvInResult(true, $"Đã duyệt phiếu nhập {fg.InvInNo}.", fg.Id, fg.InvInNo, fg.Lines.Sum(l => l.Qty));
+    }
+
+    // ── PHIẾU XUẤT KHO THEO TEM (Inv_VerifiedIDInOut / OutGenInAndOut) ─
+    public Task<List<Shipment>> ShipmentsAsync() =>
+        db.Shipments.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<Shipment?> GetShipmentAsync(int id) =>
+        db.Shipments.Include(x => x.Lines).ThenInclude(l => l.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo phiếu xuất kho theo tem. Mô phỏng nghiệp vụ Inv_InvVerifiedID_OutGenInAndOut của EQR:
+    /// - Mọi tem phải tồn tại trong hệ thống.
+    /// - Tem đã vô hiệu (Void) hoặc rách/vỡ (Broken) → từ chối.
+    /// - Tem đã xuất ở phiếu khác → từ chối (không xuất trùng).
+    /// - Phiếu mới ở trạng thái PENDING (chờ xuất); dòng tem gắn theo sản phẩm của tem.
+    /// </summary>
+    public async Task<ShipResult> CreateShipmentAsync(Shipment header, IEnumerable<string> qrIds, string createdBy)
+    {
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new ShipResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new ShipResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        var bad = stamps.Where(s => s.Status == StampStatus.Void || s.Status == StampStatus.Broken).ToList();
+        if (bad.Count > 0)
+            return new ShipResult(false, $"{bad.Count} tem đã vô hiệu/rách-vỡ, không thể xuất: {string.Join(", ", bad.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        // tem đã xuất ở phiếu khác
+        var alreadyShipped = await db.ShipmentLines.IgnoreQueryFilters()
+            .Where(l => codes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        if (alreadyShipped.Count > 0)
+            return new ShipResult(false, $"{alreadyShipped.Count} tem đã được xuất trước đó: {string.Join(", ", alreadyShipped.Take(10))}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(header.ShipmentNo)) header.ShipmentNo = $"PXK{DateTime.Now:yyMMddHHmmss}";
+        header.ShipmentNo = header.ShipmentNo.Trim();
+        if (await db.Shipments.AnyAsync(x => x.ShipmentNo == header.ShipmentNo))
+            return new ShipResult(false, $"Mã phiếu {header.ShipmentNo} đã tồn tại.", 0, "", 0);
+
+        header.Status = "PENDING";
+        header.CreatedBy = createdBy;
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+            header.Lines.Add(new ShipmentLine { QrId = s.QrId, ProductId = s.ProductId, ShippedAt = now });
+        db.Shipments.Add(header);
+        await db.SaveChangesAsync();
+        return new ShipResult(true, $"Đã tạo phiếu xuất {header.ShipmentNo} ({stamps.Count} tem).", header.Id, header.ShipmentNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Xuất phiếu (ghi nhận tem ra khỏi kho). Mô phỏng bước OutInv của EQR:
+    /// - Chỉ phiếu PENDING mới được xuất.
+    /// - Xuất xong: Status = SHIPPED + ghi mốc/người xuất; đánh dấu tem đã xuất (ShipmentId, ShippedAt, CustomerCode).
+    /// </summary>
+    public async Task<ShipResult> ShipShipmentAsync(int id, string shippedBy)
+    {
+        var sh = await db.Shipments.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (sh == null) return new ShipResult(false, "Không tìm thấy phiếu xuất.", 0, "", 0);
+        if (sh.Status != "PENDING") return new ShipResult(false, $"Phiếu {sh.ShipmentNo} đang ở trạng thái {sh.Status}, không thể xuất.", sh.Id, sh.ShipmentNo, 0);
+
+        var codes = sh.Lines.Select(l => l.QrId).ToList();
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+        {
+            s.ShipmentId = sh.Id;
+            s.ShippedAt = now;
+            s.CustomerCode = sh.CustomerCode;
+        }
+        sh.Status = "SHIPPED";
+        sh.ShippedAt = now;
+        sh.ShippedBy = shippedBy;
+        await db.SaveChangesAsync();
+        return new ShipResult(true, $"Đã xuất phiếu {sh.ShipmentNo} ({stamps.Count} tem).", sh.Id, sh.ShipmentNo, stamps.Count);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

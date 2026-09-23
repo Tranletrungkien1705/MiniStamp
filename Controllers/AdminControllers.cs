@@ -210,3 +210,47 @@ public class InventoryInController(IStampService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut / OutGenInAndOut của EQR)
+public class ShipmentController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ShipmentsAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? shipmentNo, string? customerCode, string? customerName,
+        string? customerAddress, string? plateNo, string? moocNo, string? driverName, string? driverPhoneNo,
+        string? transportType, string? receivePlace, string? refNoSys, string? refNo, string? refType,
+        string? remark, string? codes)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        var header = new Shipment
+        {
+            ShipmentNo = shipmentNo ?? "",
+            CustomerCode = customerCode, CustomerName = customerName, CustomerAddress = customerAddress,
+            PlateNo = plateNo, MoocNo = moocNo, DriverName = driverName, DriverPhoneNo = driverPhoneNo,
+            TransportType = transportType, ReceivePlace = receivePlace,
+            RefNoSys = refNoSys, RefNo = refNo, RefType = refType, Remark = remark
+        };
+        var r = await svc.CreateShipmentAsync(header, list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var s = await svc.GetShipmentAsync(id);
+        if (s == null) return NotFound();
+        return View(s);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Ship(int id)
+    {
+        var r = await svc.ShipShipmentAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}

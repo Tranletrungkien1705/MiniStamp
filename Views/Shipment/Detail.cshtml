@@ -1,0 +1,57 @@
+@model Shipment
+@{
+    ViewData["Title"] = $"Phiếu xuất kho {Model.ShipmentNo}";
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Phiếu xuất kho <span style="font-family:monospace">@Model.ShipmentNo</span></h5>
+            <div class="text-muted small">
+                @Model.Lines.Count tem · tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerName) || !string.IsNullOrWhiteSpace(Model.CustomerCode))
+            { <div class="text-muted small">Khách hàng: <b>@Model.CustomerName</b> @(string.IsNullOrWhiteSpace(Model.CustomerCode) ? "" : $"({Model.CustomerCode})")</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerAddress)) { <div class="text-muted small">Địa chỉ: @Model.CustomerAddress</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.PlateNo) || !string.IsNullOrWhiteSpace(Model.MoocNo))
+            { <div class="text-muted small">Vận chuyển: xe @Model.PlateNo @(string.IsNullOrWhiteSpace(Model.MoocNo) ? "" : "· mooc " + Model.MoocNo) @(string.IsNullOrWhiteSpace(Model.DriverName) ? "" : "· tài xế " + Model.DriverName)</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.ReceivePlace)) { <div class="text-muted small">Nơi nhận: @Model.ReceivePlace</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.RefNoSys) || !string.IsNullOrWhiteSpace(Model.RefNo))
+            { <div class="text-muted small">Đơn hàng nguồn: @Model.RefNoSys @Model.RefNo @Model.RefType</div> }
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+            @if (Model.ShippedAt != null) { <div class="text-muted small">Xuất lúc @Model.ShippedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ShippedBy</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            @if (Model.Status == "SHIPPED") { <span class="badge bg-success">SHIPPED</span> }
+            else if (Model.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+            else { <span class="badge bg-warning text-dark">PENDING</span> }
+            @if (Model.Status == "PENDING")
+            {
+                <form asp-action="Ship" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-truck me-1"></i>Xuất phiếu</button>
+                </form>
+            }
+            <a href="/Shipment" class="btn btn-sm btn-outline-primary">Danh sách phiếu</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Chi tiết tem xuất</h6>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Mã tem (QrId)</th><th>Sản phẩm</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td style="font-family:monospace">@l.QrId</td>
+                <td>@l.Product.Code — @l.Product.Name</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot><tr><th colspan="2" class="text-end">Tổng</th><th>@Model.Lines.Count tem</th></tr></tfoot>
+    </table>
+</div></div>

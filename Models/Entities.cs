@@ -101,6 +101,11 @@ public class Stamp : IOrgOwned
     public DateTime? FirstScanAt { get; set; }
     public DateTime? LastScanAt { get; set; }
 
+    // xuất kho theo tem (Inv_VerifiedIDInOut) — tem đã xuất bán cho khách nào
+    public int? ShipmentId { get; set; }
+    public DateTime? ShippedAt { get; set; }
+    public string? CustomerCode { get; set; }
+
     // quay thưởng
     public bool HasSpun { get; set; }
     public string? PrizeWon { get; set; }
@@ -108,6 +113,7 @@ public class Stamp : IOrgOwned
     public StampBatch Batch { get; set; } = null!;
     public Product Product { get; set; } = null!;
     public Box? Box { get; set; }
+    public Shipment? Shipment { get; set; }
 }
 
 // ── Phiếu tem rách/vỡ (NG) — nghiệp vụ InvF_BrokenStamp của EQR ──────
@@ -139,6 +145,57 @@ public class BrokenStampLine : IOrgOwned
     public DateTime BrokenAt { get; set; } = DateTime.Now;
 
     public BrokenStamp BrokenStamp { get; set; } = null!;
+}
+
+// ── Phiếu xuất kho theo tem (Inv_VerifiedIDInOut) — nghiệp vụ
+//    Inv_InvVerifiedID_OutGenInAndOut của EQR (xuất-ghép tem theo phiếu).
+//    1 phiếu = header (vận chuyển/khách/đơn hàng nguồn) + N dòng tem đã xuất.
+public class Shipment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ShipmentNo { get; set; } = "";     // mã phiếu xuất (IVerifiedIDInOutNo, duy nhất trong tenant)
+    public string Status { get; set; } = "PENDING";   // PENDING / SHIPPED / CANCEL
+
+    // đơn hàng nguồn
+    public string? RefNoSys { get; set; }
+    public string? RefNo { get; set; }
+    public string? RefType { get; set; }
+
+    // vận chuyển
+    public string? PlateNo { get; set; }              // biển số xe
+    public string? MoocNo { get; set; }               // số mooc
+    public string? DriverName { get; set; }
+    public string? DriverPhoneNo { get; set; }
+    public string? TransportType { get; set; }
+    public string? ReceivePlace { get; set; }         // nơi nhận
+
+    // khách hàng
+    public string? CustomerCode { get; set; }
+    public string? CustomerName { get; set; }
+    public string? CustomerAddress { get; set; }
+
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ShippedAt { get; set; }
+    public string? ShippedBy { get; set; }
+
+    public List<ShipmentLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu xuất (1 tem đã xuất) ─────────────────────────
+public class ShipmentLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ShipmentId { get; set; }
+    public int ProductId { get; set; }
+    public string QrId { get; set; } = "";           // mã tem đã xuất
+    public DateTime ShippedAt { get; set; } = DateTime.Now;
+
+    public Shipment Shipment { get; set; } = null!;
+    public Product Product { get; set; } = null!;
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────
