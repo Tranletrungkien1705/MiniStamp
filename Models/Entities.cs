@@ -116,6 +116,13 @@ public class Stamp : IOrgOwned
     public string? ActivatedPhone { get; set; }
     public DateTime? WarrantyEnd { get; set; }
 
+    // kích hoạt bảo hành bằng PIN (WarrantyDateStartFromPIN_Activate) — nghiệp vụ EQR
+    public string? WarrantyNo { get; set; }          // WarrantyNo — số phiếu bảo hành (cấp lần đầu, giữ nguyên khi kích hoạt lại)
+    public int WarrantyCount { get; set; }            // WarrantyCount — số lần kích hoạt bảo hành
+    public string? WarrantyStartIp { get; set; }      // IPAddress — IP người kích hoạt
+    public string? WarrantyLat { get; set; }          // MapLatitude — vĩ độ lúc kích hoạt
+    public string? WarrantyLong { get; set; }         // MapLongitude — kinh độ lúc kích hoạt
+
     // chống giả: đếm số lần quét + mốc
     public int ScanCount { get; set; }
     public DateTime? FirstScanAt { get; set; }
@@ -574,6 +581,34 @@ public class InvoiceDtl : IOrgOwned
 
     public Invoice Invoice { get; set; } = null!;
     public Product Product { get; set; } = null!;
+}
+
+// ── Kích hoạt bảo hành bằng PIN (WarrantyDateStartFromPIN_Activate) ──
+// Nghiệp vụ EQR (worker LIVE WAS_WarrantyDateStartFromPIN_Activate_New20250520,
+// file Report.cs): người tiêu dùng quét QR + nhập mã PIN cào trên tem để kích
+// hoạt bảo hành. Mỗi lần kích hoạt ghi 1 bản ghi lịch sử (tương ứng
+// Inv_InventoryVerifiedIDHist của EQR). Ràng buộc EQR:
+//  - Tem phải tồn tại; PIN phải khớp (so khớp PIN hoặc MD5(IDNo|PIN)).
+//  - Lần kích hoạt ĐẦU TIÊN: cấp WarrantyNo mới + ghi WarrantyDateStart.
+//  - Kích hoạt LẠI: giữ nguyên WarrantyNo/WarrantyDateStart, chỉ tăng WarrantyCount
+//    và cập nhật SĐT/IP/vị trí.
+//  - Tem đã vô hiệu (Void)/rách-vỡ (Broken) → từ chối.
+public class WarrantyActivation : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string QrId { get; set; } = "";          // IDNo — mã tem được kích hoạt
+    public string Pin { get; set; } = "";            // PIN đã nhập (đã khớp)
+    public string? PhoneNoUser { get; set; }          // SĐT người kích hoạt
+    public string? IpAddress { get; set; }            // IP người kích hoạt
+    public string? MapLatitude { get; set; }          // vĩ độ
+    public string? MapLongitude { get; set; }         // kinh độ
+    public string WarrantyNo { get; set; } = "";     // số phiếu bảo hành
+    public DateTime WarrantyDateStart { get; set; }   // ngày bắt đầu bảo hành
+    public bool IsFirstActivate { get; set; }         // true = kích hoạt lần đầu
+    public int WarrantyCount { get; set; }            // số lần kích hoạt sau lần này
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────

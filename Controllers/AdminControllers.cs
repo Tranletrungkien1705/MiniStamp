@@ -688,3 +688,20 @@ public class SalesActivationController(IStampService svc) : Controller
         return View(sa);
     }
 }
+
+// Kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate của EQR)
+public class WarrantyController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? qrId)
+    {
+        ViewBag.QrId = qrId;
+        return View(await svc.WarrantyActivationsAsync(qrId));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var w = await svc.GetWarrantyActivationAsync(id);
+        if (w == null) return NotFound();
+        return View(w);
+    }
+}

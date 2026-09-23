@@ -1,0 +1,34 @@
+@model List<WarrantyActivation>
+@{ ViewData["Title"] = "Kích hoạt bảo hành"; var qrId = (string?)ViewBag.QrId ?? ""; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Lịch sử kích hoạt bảo hành bằng PIN</h6>
+        <form method="get" action="/Warranty" class="d-flex gap-2">
+            <input name="qrId" value="@qrId" class="form-control form-control-sm" placeholder="Lọc theo mã tem..." />
+            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+        </form>
+    </div>
+    <p class="text-muted small">Người tiêu dùng quét QR + nhập mã PIN cào trên tem để kích hoạt bảo hành (nghiệp vụ <b>WarrantyDateStartFromPIN_Activate</b>). Lần đầu cấp số phiếu bảo hành; kích hoạt lại chỉ cập nhật thông tin.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã tem</th><th>Số phiếu BH</th><th>Ngày bắt đầu</th><th>SĐT</th><th>IP</th><th class="text-end">Lần</th><th>Loại</th><th>Thời điểm</th></tr></thead>
+        <tbody>
+        @foreach (var w in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Warranty/Detail/@w.Id'">
+                <td class="fw-semibold">@w.QrId</td>
+                <td>@w.WarrantyNo</td>
+                <td>@w.WarrantyDateStart.ToString("dd/MM/yyyy")</td>
+                <td>@(w.PhoneNoUser ?? "—")</td>
+                <td class="small text-muted">@(w.IpAddress ?? "—")</td>
+                <td class="text-end">@w.WarrantyCount</td>
+                <td>
+                    @if (w.IsFirstActivate) { <span class="badge bg-success">Lần đầu</span> }
+                    else { <span class="badge bg-secondary">Kích hoạt lại</span> }
+                </td>
+                <td class="small text-muted">@w.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có lượt kích hoạt bảo hành nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

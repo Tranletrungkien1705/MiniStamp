@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<StampPair> StampPairs => Set<StampPair>();
     public DbSet<Stamp> Stamps => Set<Stamp>();
     public DbSet<ScanLog> ScanLogs => Set<ScanLog>();
+    public DbSet<WarrantyActivation> WarrantyActivations => Set<WarrantyActivation>();
     public DbSet<LotteryReward> Rewards => Set<LotteryReward>();
     public DbSet<BrokenStamp> BrokenStamps => Set<BrokenStamp>();
     public DbSet<BrokenStampLine> BrokenStampLines => Set<BrokenStampLine>();
@@ -226,6 +227,11 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);
+        b.Entity<WarrantyActivation>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.QrId });   // tra lịch sử kích hoạt theo tem
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
         b.Entity<LotteryReward>().HasQueryFilter(x => x.OrgId == _orgId);
     }
 

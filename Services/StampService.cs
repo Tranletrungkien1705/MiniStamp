@@ -53,6 +53,10 @@ public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Coun
 /// <summary>Kết quả gom tem vào Block (nghiệp vụ Map_Block).</summary>
 public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int QtyVerified);
 
+/// <summary>Kết quả kích hoạt bảo hành bằng PIN (nghiệp vụ WarrantyDateStartFromPIN_Activate).</summary>
+public record WarrantyResult(bool Ok, string Message, int Id, string QrId, string WarrantyNo,
+    DateTime WarrantyDateStart, bool IsFirstActivate, int WarrantyCount);
+
 public interface IStampService
 {
     // admin
@@ -146,6 +150,11 @@ public interface IStampService
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
     Task<(bool ok, string prize)> SpinAsync(string qrId);
+    // kích hoạt bảo hành bằng PIN (WarrantyDateStartFromPIN_Activate)
+    Task<WarrantyResult> ActivateWarrantyByPinAsync(string qrId, string pin, string? phone, string? ip,
+        string? mapLatitude, string? mapLongitude);
+    Task<List<WarrantyActivation>> WarrantyActivationsAsync(string? qrId);
+    Task<WarrantyActivation?> GetWarrantyActivationAsync(int id);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -1378,6 +1387,89 @@ public class StampService(AppDbContext db) : IStampService
         if (!picked.IsLose && picked.Stock > 0) picked.Stock--;
         await db.SaveChangesAsync();
         return (true, picked.Name);
+    }
+
+    // ── KÍCH HOẠT BẢO HÀNH BẰNG PIN (WarrantyDateStartFromPIN_Activate) ─
+    public Task<List<WarrantyActivation>> WarrantyActivationsAsync(string? qrId)
+    {
+        var query = db.WarrantyActivations.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(qrId)) query = query.Where(x => x.QrId == qrId.Trim());
+        return query.OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+    }
+
+    public Task<WarrantyActivation?> GetWarrantyActivationAsync(int id) =>
+        db.WarrantyActivations.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Kích hoạt bảo hành bằng PIN. Mô phỏng nghiệp vụ
+    /// WAS_WarrantyDateStartFromPIN_Activate_New20250520 của EQR (Report.cs):
+    /// - Tem phải tồn tại; PIN phải khớp (so khớp PIN hoặc MD5(IDNo|PIN)).
+    /// - Tem đã vô hiệu (Void)/rách-vỡ (Broken) → từ chối.
+    /// - Lần kích hoạt ĐẦU TIÊN: cấp WarrantyNo mới + ghi WarrantyDateStart.
+    /// - Kích hoạt LẠI: giữ nguyên WarrantyNo/WarrantyDateStart, chỉ tăng WarrantyCount
+    ///   và cập nhật SĐT/IP/vị trí (đúng nhánh update thứ 2 của EQR).
+    /// - Mỗi lần kích hoạt ghi 1 bản ghi lịch sử (WarrantyActivation).
+    /// </summary>
+    public async Task<WarrantyResult> ActivateWarrantyByPinAsync(string qrId, string pin, string? phone, string? ip,
+        string? mapLatitude, string? mapLongitude)
+    {
+        qrId = (qrId ?? "").Trim();
+        pin = (pin ?? "").Trim();
+        if (qrId.Length == 0) return new WarrantyResult(false, "Cần mã tem.", 0, qrId, "", default, false, 0);
+        if (pin.Length == 0) return new WarrantyResult(false, "Cần nhập mã PIN cào trên tem.", 0, qrId, "", default, false, 0);
+
+        var s = await db.Stamps.IgnoreQueryFilters().Include(x => x.Product)
+            .FirstOrDefaultAsync(x => x.QrId == qrId);
+        if (s == null) return new WarrantyResult(false, "Mã tem không tồn tại.", 0, qrId, "", default, false, 0);
+        if (s.Status == StampStatus.Void) return new WarrantyResult(false, "Tem đã vô hiệu.", 0, qrId, "", default, false, 0);
+        if (s.Status == StampStatus.Broken) return new WarrantyResult(false, "Tem đã được ghi nhận rách/vỡ.", 0, qrId, "", default, false, 0);
+
+        // PIN phải khớp: so khớp trực tiếp PIN hoặc hash MD5(IDNo|PIN) — đúng EQR
+        var hash = Md5Hex($"{qrId}|{pin}");
+        if (!string.Equals(s.Pin, pin, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(s.Pin, hash, StringComparison.OrdinalIgnoreCase))
+            return new WarrantyResult(false, "Mã PIN không đúng với tem này.", 0, qrId, "", default, false, 0);
+
+        var now = DateTime.Now;
+        var isFirst = s.ActivatedAt == null;
+        var warrantyNo = isFirst ? NewWarrantyNo() : (s.WarrantyNo ?? NewWarrantyNo());
+        var warrantyDateStart = isFirst ? now.Date : (s.ActivatedAt?.Date ?? now.Date);
+        s.WarrantyCount += 1;
+
+        if (isFirst)
+        {
+            s.ActivatedAt = now;
+            s.WarrantyNo = warrantyNo;
+            s.Status = StampStatus.Activated;
+            s.WarrantyEnd = now.Date.AddMonths(s.Product?.WarrantyMonths ?? 12);
+        }
+        s.ActivatedPhone = string.IsNullOrWhiteSpace(phone) ? s.ActivatedPhone : phone.Trim();
+        s.WarrantyStartIp = string.IsNullOrWhiteSpace(ip) ? s.WarrantyStartIp : ip.Trim();
+        s.WarrantyLat = string.IsNullOrWhiteSpace(mapLatitude) ? s.WarrantyLat : mapLatitude.Trim();
+        s.WarrantyLong = string.IsNullOrWhiteSpace(mapLongitude) ? s.WarrantyLong : mapLongitude.Trim();
+
+        var log = new WarrantyActivation
+        {
+            QrId = qrId, Pin = pin, PhoneNoUser = s.ActivatedPhone, IpAddress = s.WarrantyStartIp,
+            MapLatitude = s.WarrantyLat, MapLongitude = s.WarrantyLong,
+            WarrantyNo = warrantyNo, WarrantyDateStart = warrantyDateStart,
+            IsFirstActivate = isFirst, WarrantyCount = s.WarrantyCount, CreatedBy = "consumer"
+        };
+        db.WarrantyActivations.Add(log);
+        await db.SaveChangesAsync();
+
+        var msg = isFirst
+            ? $"Kích hoạt bảo hành thành công — số phiếu {warrantyNo}, bắt đầu {warrantyDateStart:dd/MM/yyyy}, hết hạn {s.WarrantyEnd:dd/MM/yyyy}."
+            : $"Tem đã kích hoạt trước đó (số phiếu {warrantyNo}) — đã cập nhật thông tin, lần kích hoạt thứ {s.WarrantyCount}.";
+        return new WarrantyResult(true, msg, log.Id, qrId, warrantyNo, warrantyDateStart, isFirst, s.WarrantyCount);
+    }
+
+    private static string NewWarrantyNo() => $"BH{DateTime.Now:yyMMddHHmmss}{Random.Shared.Next(10, 99)}";
+
+    private static string Md5Hex(string input)
+    {
+        var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static string NewQrId()

@@ -59,16 +59,33 @@
           <div class="kv"><span class="k">Ngày sản xuất</span><span class="v">@(Model.Batch?.MfgDate.ToString("dd/MM/yyyy"))</span></div>
           <div class="kv"><span class="k">Số lần tra cứu</span><span class="v">@Model.Stamp?.ScanCount</span></div>
           @if (Model.Stamp?.WarrantyEnd != null) { <div class="kv"><span class="k">Bảo hành đến</span><span class="v">@Model.Stamp.WarrantyEnd?.ToString("dd/MM/yyyy")</span></div> }
+          @if (!string.IsNullOrEmpty(Model.Stamp?.WarrantyNo)) { <div class="kv"><span class="k">Số phiếu bảo hành</span><span class="v">@Model.Stamp!.WarrantyNo</span></div> }
+          @if (Model.Stamp?.WarrantyCount > 0) { <div class="kv"><span class="k">Số lần kích hoạt</span><span class="v">@Model.Stamp!.WarrantyCount</span></div> }
 
           @foreach (var w in Model.Warnings)
           { <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>@w</div> }
 
           @if (Model.Genuine && Model.Stamp?.ActivatedAt == null)
           {
-            <form method="post" action="/Verify/Activate" class="mt-3 d-flex gap-2">
+            <form method="post" action="/Verify/Activate" class="mt-3">
               <input type="hidden" name="code" value="@Model.Stamp!.QrId" />
-              <input name="phone" class="form-control" placeholder="SĐT kích hoạt bảo hành" />
-              <button class="btn btn-success text-nowrap"><i class="bi bi-shield-check me-1"></i>Kích hoạt</button>
+              <div class="d-flex gap-2 mb-2">
+                <input name="pin" class="form-control" placeholder="Mã PIN cào trên tem" />
+                <input name="phone" class="form-control" placeholder="SĐT kích hoạt" />
+              </div>
+              <button class="btn btn-success w-100"><i class="bi bi-shield-check me-1"></i>Kích hoạt bảo hành</button>
+              <div class="text-muted small mt-1">Nhập mã PIN cào trên tem để kích hoạt bảo hành chính hãng.</div>
+            </form>
+          }
+          else if (Model.Genuine && Model.Stamp?.ActivatedAt != null)
+          {
+            <form method="post" action="/Verify/Activate" class="mt-3">
+              <input type="hidden" name="code" value="@Model.Stamp!.QrId" />
+              <div class="d-flex gap-2 mb-2">
+                <input name="pin" class="form-control" placeholder="Mã PIN cào trên tem" />
+                <input name="phone" class="form-control" placeholder="SĐT (cập nhật)" />
+              </div>
+              <button class="btn btn-outline-success w-100"><i class="bi bi-arrow-repeat me-1"></i>Kích hoạt lại (cập nhật thông tin)</button>
             </form>
           }
           @if (Model.Genuine && Model.Stamp?.HasSpun != true)

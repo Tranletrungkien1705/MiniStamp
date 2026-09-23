@@ -17,8 +17,16 @@ public class VerifyController(IStampService svc) : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Activate(string code, string phone)
+    public async Task<IActionResult> Activate(string code, string phone, string? pin)
     {
+        // Nếu có nhập PIN → dùng nghiệp vụ kích hoạt bảo hành bằng PIN (WarrantyDateStartFromPIN_Activate)
+        if (!string.IsNullOrWhiteSpace(pin))
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var r = await svc.ActivateWarrantyByPinAsync(code, pin, phone, ip, null, null);
+            TempData[r.Ok ? "Success" : "Error"] = r.Message;
+            return RedirectToAction(nameof(Index), new { code });
+        }
         var (ok, msg) = await svc.ActivateAsync(code, phone);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index), new { code });

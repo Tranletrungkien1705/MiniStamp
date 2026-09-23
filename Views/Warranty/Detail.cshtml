@@ -1,0 +1,32 @@
+@model WarrantyActivation
+@{ ViewData["Title"] = "Chi tiết kích hoạt bảo hành"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Lượt kích hoạt bảo hành #@Model.Id</h6>
+        <a href="/Warranty" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+                <div class="text-muted small mb-2">Tem & bảo hành</div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Mã tem</span><b>@Model.QrId</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Số phiếu BH</span><b>@Model.WarrantyNo</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Ngày bắt đầu</span><b>@Model.WarrantyDateStart.ToString("dd/MM/yyyy")</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Số lần kích hoạt</span><b>@Model.WarrantyCount</b></div>
+                <div class="d-flex justify-content-between py-1"><span class="text-muted">Loại</span>
+                    @if (Model.IsFirstActivate) { <span class="badge bg-success">Lần đầu</span> } else { <span class="badge bg-secondary">Kích hoạt lại</span> }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+                <div class="text-muted small mb-2">Người kích hoạt</div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">SĐT</span><b>@(Model.PhoneNoUser ?? "—")</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">IP</span><b>@(Model.IpAddress ?? "—")</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Vĩ độ</span><b>@(Model.MapLatitude ?? "—")</b></div>
+                <div class="d-flex justify-content-between py-1 border-bottom"><span class="text-muted">Kinh độ</span><b>@(Model.MapLongitude ?? "—")</b></div>
+                <div class="d-flex justify-content-between py-1"><span class="text-muted">Thời điểm</span><b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")</b></div>
+            </div>
+        </div>
+    </div>
+</div></div>
