@@ -1,0 +1,26 @@
+@model List<SalesActivation>
+@{ ViewData["Title"] = "Kích hoạt bán hàng"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Phiếu kích hoạt bán hàng (Inv_InvVerifiedID_ActivateSales)</h6>
+        <a href="/SalesActivation/Create" class="btn btn-sm btn-primary"><i class="bi bi-cart-check me-1"></i>Kích hoạt bán</a>
+    </div>
+    <p class="text-muted small">Đại lý/NPP xác nhận đã <b>bán</b> tem cho khách: đánh dấu tem <b>FlagSales='1'</b> + mốc bán + khách hàng. Có thể <b>hoàn tác</b> (FlagSalesBackStatus) để đưa tem về trạng thái chưa bán.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã phiếu</th><th>Sản phẩm</th><th>Khách hàng</th><th class="text-end">Số tem</th><th>Mốc bán</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var s in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/SalesActivation/Detail/@s.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@s.SaNo</td>
+                <td>@s.Product.Code — @s.Product.Name</td>
+                <td>@(string.IsNullOrWhiteSpace(s.CustomerName) ? s.CustomerCode : s.CustomerName)</td>
+                <td class="text-end">@s.Quantity</td>
+                <td class="small text-muted">@s.SalesDTime.ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small text-muted">@s.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có phiếu kích hoạt bán hàng nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

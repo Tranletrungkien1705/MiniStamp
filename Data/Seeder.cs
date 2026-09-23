@@ -197,6 +197,30 @@ public static class Seeder
             }
             await db.SaveChangesAsync();
 
+            // 1 phiếu kích hoạt bán hàng mẫu (Inv_InvVerifiedID_ActivateSales) — đã bán 2 tem của lô
+            var saTwo = batch.Stamps.Skip(20).Take(2).ToList();
+            if (saTwo.Count > 0)
+            {
+                var sa = new SalesActivation
+                {
+                    SaNo = "PXKHT-SEED-001", RefNoSys = "PXKHT.SEED.0", RefType = "INVOUT",
+                    ProductId = p1.Id, CustomerCode = "KH001", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                    SalesDTime = DateTime.Now.AddDays(-1), Remark = "Kích hoạt bán lô mẫu", CreatedBy = "seed"
+                };
+                foreach (var s in saTwo)
+                {
+                    sa.Lines.Add(new SalesActivationLine { QrId = s.QrId, SalesDTime = sa.SalesDTime });
+                    s.FlagSales = true;
+                    s.SalesDTime = sa.SalesDTime;
+                    s.CustomerCode = sa.CustomerCode;
+                }
+                sa.Quantity = saTwo.Count;
+                db.SalesActivations.Add(sa);
+                await db.SaveChangesAsync();
+                foreach (var s in saTwo) s.SalesActivationId = sa.Id;
+                await db.SaveChangesAsync();
+            }
+
             // 1 phiếu kích hoạt thông tin sản xuất mẫu (InvF_ProductionActive)
             var life = await db.ProductLives.FirstOrDefaultAsync(x => x.Code == "1MONTH");
             if (life != null)

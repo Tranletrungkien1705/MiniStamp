@@ -783,6 +783,15 @@ public class SalesActivationController(IStampService svc) : Controller
         if (sa == null) return NotFound();
         return View(sa);
     }
+
+    // Hoàn tác kích hoạt bán hàng (nghiệp vụ Inv_InventoryVerifiedID_FlagSalesBackStatus của EQR)
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Revert(int id, string? reason)
+    {
+        var r = await svc.RevertSalesActivationAsync(id, reason, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 // Yêu cầu xuất kho (nghiệp vụ InvF_ReqInvOut của EQR)

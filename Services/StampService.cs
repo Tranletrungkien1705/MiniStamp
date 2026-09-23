@@ -59,6 +59,9 @@ public record PairResult(bool Ok, string Message, int Id, string MainQrId, strin
 /// <summary>Kết quả kích hoạt bán hàng (nghiệp vụ Inv_InvVerifiedID_ActivateSales).</summary>
 public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Count);
 
+/// <summary>Kết quả hoàn tác kích hoạt bán hàng (nghiệp vụ Inv_InventoryVerifiedID_FlagSalesBackStatus).</summary>
+public record SalesRevertResult(bool Ok, string Message, int Id, string SaNo, int Released);
+
 /// <summary>Kết quả gom tem vào Block (nghiệp vụ Map_Block).</summary>
 public record BlockResult(bool Ok, string Message, int Id, string BlockNo, int QtyVerified);
 
@@ -169,6 +172,7 @@ public interface IStampService
     Task<SalesActivation?> GetSalesActivationAsync(int id);
     Task<SalesResult> ActivateSalesAsync(string saNo, int productId, string? customerCode, string? customerName,
         DateTime salesDTime, IEnumerable<string> qrIds, string? remark, string createdBy);
+    Task<SalesRevertResult> RevertSalesActivationAsync(int id, string? reason, string revertedBy);
     // gom tem vào Block (Map_Block)
     Task<List<BlockType>> BlockTypesAsync();
     Task<List<Block>> BlocksAsync();
@@ -1470,6 +1474,40 @@ public class StampService(AppDbContext db) : IStampService
         await db.SaveChangesAsync();
 
         return new SalesResult(true, $"Đã kích hoạt bán hàng {sa.SaNo} ({stamps.Count} tem).", sa.Id, sa.SaNo, stamps.Count);
+    }
+
+    /// <summary>
+    /// Hoàn tác (đưa về trạng thái chưa kích hoạt bán hàng) 1 phiếu kích hoạt bán hàng.
+    /// Mô phỏng nghiệp vụ WAS_Inv_InventoryVerifiedID_FlagSalesBackStatus của EQR (zTemp.cs):
+    /// - Phiếu phải tồn tại; không hoàn tác phiếu đã hoàn tác (chống trùng).
+    /// - Với mọi tem trong phiếu: xóa liên kết xuất bán (FlagSales='0', SalesDTime=null,
+    ///   CustomerCode=null, SalesActivationId=null) — đúng các cột EQR set về null.
+    /// - Xóa phiếu kích hoạt bán hàng (tương ứng EQR xóa bản ghi Inv_VerifiedIDInOut).
+    /// </summary>
+    public async Task<SalesRevertResult> RevertSalesActivationAsync(int id, string? reason, string revertedBy)
+    {
+        var sa = await db.SalesActivations.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (sa == null) return new SalesRevertResult(false, "Không tìm thấy phiếu kích hoạt bán hàng.", 0, "", 0);
+
+        var codes = sa.Lines.Select(l => l.QrId).Distinct().ToList();
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        // gỡ liên kết xuất bán trên từng tem (đúng các cột EQR set null + FlagSales='0')
+        foreach (var s in stamps)
+        {
+            s.FlagSales = false;
+            s.SalesDTime = null;
+            s.CustomerCode = null;
+            s.SalesActivationId = null;
+        }
+
+        var saNo = sa.SaNo;
+        db.SalesActivations.Remove(sa);
+        await db.SaveChangesAsync();
+
+        return new SalesRevertResult(true,
+            $"Đã hoàn tác kích hoạt bán hàng {saNo}, giải phóng {stamps.Count} tem về trạng thái chưa bán.",
+            0, saNo, stamps.Count);
     }
 
     // ── GOM TEM VÀO BLOCK (Map_Block) ───────────────────────────────
