@@ -17,6 +17,9 @@ public record PackResult(bool Ok, string Message, int BoxId, string BoxNo, int P
 /// <summary>Kết quả đóng gói hộp vào thùng (nghiệp vụ Map_Can).</summary>
 public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, int Packed);
 
+/// <summary>Kết quả khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo).</summary>
+public record RestoreResult(bool Ok, string Message, int BoxHistoryId, string BoxNo, int Restored, int Flagged);
+
 /// <summary>Kết quả ghi nhận phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp).</summary>
 public record BrokenResult(bool Ok, string Message, int BrokenStampId, string BsNo, int Count);
 
@@ -87,6 +90,10 @@ public interface IStampService
     Task<List<Carton>> CartonsAsync();
     Task<Carton?> GetCartonAsync(int id);
     Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
+    // khôi phục hộp tem từ lịch sử (Map_IDInBox_RestoreBoxNo)
+    Task<List<BoxHistory>> BoxHistoriesAsync(string? boxNo);
+    Task<BoxHistory?> GetBoxHistoryAsync(int id);
+    Task<RestoreResult> RestoreBoxAsync(int boxHistoryId, string createdBy);
     // ghép cặp tem (Map_StampPair)
     Task<List<StampPair>> StampPairsAsync();
     Task<StampPair?> GetStampPairAsync(int id);
@@ -293,8 +300,97 @@ public class StampService(AppDbContext db) : IStampService
         var now = DateTime.Now;
         foreach (var s in stamps) { s.BoxId = box.Id; s.BoxedAt = now; }
         box.Quantity = await db.Stamps.CountAsync(s => s.BoxId == box.Id);
+
+        // Ghi lịch sử đóng hộp (Map_IDInBoxHist) để có thể khôi phục sau này
+        var hist = new BoxHistory
+        {
+            BoxNo = box.BoxNo, FunctionName = "MAP_IDINBOX_ADDX", RefType = "ADD",
+            CreateDTimeUTC = now, QtyIDNo = stamps.Count, CreatedBy = createdBy, CreatedAt = now
+        };
+        foreach (var s in stamps) hist.Lines.Add(new BoxHistoryLine { QrId = s.QrId });
+        db.BoxHistories.Add(hist);
+
         await db.SaveChangesAsync();
         return new PackResult(true, $"Đã đóng {stamps.Count} tem vào hộp {box.BoxNo}.", box.Id, box.BoxNo, stamps.Count);
+    }
+
+    // ── KHÔI PHỤC HỘP TEM TỪ LỊCH SỬ (Map_IDInBox_RestoreBoxNo) ─────
+    public Task<List<BoxHistory>> BoxHistoriesAsync(string? boxNo)
+    {
+        var q = db.BoxHistories.Include(x => x.Lines).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(boxNo))
+        {
+            var k = boxNo.Trim();
+            q = q.Where(x => x.BoxNo.Contains(k));
+        }
+        return q.OrderByDescending(x => x.CreateDTimeUTC).Take(300).ToListAsync();
+    }
+
+    public Task<BoxHistory?> GetBoxHistoryAsync(int id) =>
+        db.BoxHistories.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Khôi phục 1 lần đóng hộp từ lịch sử. Mô phỏng nghiệp vụ
+    /// WAS_Map_IDInBox_RestoreBoxNo của EQR (zTemp.1.cs):
+    /// - Bản ghi lịch sử phải tồn tại và chưa được khôi phục.
+    /// - Hộp đích phải tồn tại.
+    /// - Tem đã xuất bán (FlagSales) ⇒ đưa vào bảng tem trung tính (nghi vấn), KHÔNG gắn lại hộp.
+    /// - Tem đang trùng ở hộp khác ⇒ đưa vào bảng tem trung tính (nghi vấn), KHÔNG gắn lại hộp.
+    /// - Còn lại ⇒ gắn lại vào hộp (BoxId + BoxedAt).
+    /// </summary>
+    public async Task<RestoreResult> RestoreBoxAsync(int boxHistoryId, string createdBy)
+    {
+        var hist = await db.BoxHistories.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == boxHistoryId);
+        if (hist == null) return new RestoreResult(false, "Không tìm thấy bản ghi lịch sử đóng hộp.", 0, "", 0, 0);
+        if (hist.RestoredAt != null)
+            return new RestoreResult(false, $"Lần đóng hộp {hist.BoxNo} ({hist.CreateDTimeUTC:dd/MM/yyyy HH:mm}) đã được khôi phục trước đó.", hist.Id, hist.BoxNo, 0, 0);
+
+        var box = await db.Boxes.FirstOrDefaultAsync(b => b.BoxNo == hist.BoxNo);
+        if (box == null) return new RestoreResult(false, $"Hộp {hist.BoxNo} không tồn tại.", hist.Id, hist.BoxNo, 0, 0);
+
+        var codes = hist.Lines.Select(l => l.QrId).Distinct().ToList();
+        if (codes.Count == 0) return new RestoreResult(false, "Lần đóng hộp này không có tem nào.", hist.Id, hist.BoxNo, 0, 0);
+
+        var stamps = await db.Stamps.Include(s => s.Box).Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        // tem đã xuất bán (FlagSales) ⇒ nghi vấn
+        var sold = stamps.Where(s => s.FlagSales).Select(s => s.QrId).ToHashSet();
+        // tem đang trùng ở hộp khác ⇒ nghi vấn
+        var dup = stamps.Where(s => s.BoxId != null && s.Box != null && s.Box.BoxNo != hist.BoxNo)
+            .Select(s => s.QrId).ToHashSet();
+        var flagged = sold.Union(dup).ToHashSet();
+
+        var now = DateTime.Now;
+        // ghi tem nghi vấn vào bảng trung tính (chống trùng)
+        var existingNeutral = await db.NeutralStamps.IgnoreQueryFilters()
+            .Where(x => flagged.Contains(x.QrId)).Select(x => x.QrId).ToListAsync();
+        foreach (var qr in flagged.Where(q => !existingNeutral.Contains(q)))
+            db.NeutralStamps.Add(new NeutralStamp
+            {
+                QrId = qr, FlagNeutral = false, OutCount = 1,
+                Note = sold.Contains(qr)
+                    ? "Khôi phục hộp: tem đã xuất bán — nghi vấn."
+                    : "Khôi phục hộp: tem đang trùng ở hộp khác — nghi vấn.",
+                CreatedBy = createdBy, CreatedAt = now
+            });
+
+        // gắn lại các tem còn lại vào hộp
+        var restored = 0;
+        foreach (var s in stamps.Where(s => !flagged.Contains(s.QrId)))
+        {
+            s.BoxId = box.Id;
+            s.BoxedAt = now;
+            restored++;
+        }
+        box.Quantity = await db.Stamps.CountAsync(s => s.BoxId == box.Id);
+
+        hist.RestoredAt = now;
+        hist.RestoredBy = createdBy;
+        await db.SaveChangesAsync();
+
+        return new RestoreResult(true,
+            $"Đã khôi phục {restored} tem vào hộp {box.BoxNo}; {flagged.Count} tem nghi vấn đưa vào bảng trung tính.",
+            hist.Id, box.BoxNo, restored, flagged.Count);
     }
 
     // ── ĐÓNG GÓI HỘP VÀO THÙNG (Map_Can) ────────────────────────────

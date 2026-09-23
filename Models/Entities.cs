@@ -76,6 +76,43 @@ public class Carton : IOrgOwned
     public List<Box> Boxes { get; set; } = [];
 }
 
+// ── Lịch sử đóng hộp (Map_IDInBoxHist) — nghiệp vụ EQR ───────────────
+// Nghiệp vụ EQR (worker LIVE WAS_Map_IDInBox_RestoreBoxNo /
+// WAS_Map_IDInBoxHist_Get_ForRestoreBoxNo, file zTemp.1.cs): mỗi lần
+// đóng tem vào hộp, EQR ghi 1 bản ghi lịch sử (Map_IDInBoxHist) gồm
+// BoxNo + FunctionName + RefType + CreateDTimeUTC + danh sách IDNo.
+// Nhờ đó có thể KHÔI PHỤC lại 1 lần đóng hộp đã bị gỡ (RestoreBoxNo):
+//  - Tem đã xuất bán (FlagSales='1') ⇒ đưa vào bảng tem trung tính (nghi vấn).
+//  - Tem đang trùng ở hộp khác ⇒ đưa vào bảng tem trung tính (nghi vấn).
+//  - Còn lại ⇒ gắn lại vào hộp.
+public class BoxHistory : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BoxNo { get; set; } = "";            // BoxNo — mã hộp của lần đóng
+    public string FunctionName { get; set; } = "";     // FunctionName — vd MAP_IDINBOX_ADDX
+    public string RefType { get; set; } = "";          // RefType — vd ADD / VIRTUAL
+    public DateTime CreateDTimeUTC { get; set; } = DateTime.Now;  // mốc đóng hộp
+    public int QtyIDNo { get; set; }                    // số tem trong lần đóng
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? RestoredAt { get; set; }           // mốc khôi phục (null = chưa khôi phục)
+    public string? RestoredBy { get; set; }
+
+    public List<BoxHistoryLine> Lines { get; set; } = [];
+}
+
+// ── Dòng lịch sử đóng hộp (1 tem trong 1 lần đóng) ───────────────────
+public class BoxHistoryLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BoxHistoryId { get; set; }
+    public string QrId { get; set; } = "";            // IDNo — mã tem đã đóng
+
+    public BoxHistory BoxHistory { get; set; } = null!;
+}
+
 // ── Ghép cặp tem (Map_StampPair) — nghiệp vụ EQR ─────────────────────
 // Nghiệp vụ EQR (WAS_Map_StampPair_Add_New20220415, file Template.cs):
 // ghép 1 tem CHÍNH (MainQrId) với 1 tem PHỤ (SubQrId) thành 1 cặp 1:1.

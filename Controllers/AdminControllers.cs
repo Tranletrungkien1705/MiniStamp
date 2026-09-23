@@ -103,6 +103,31 @@ public class BoxController(IStampService svc) : Controller
     }
 }
 
+// Khôi phục hộp tem từ lịch sử (nghiệp vụ Map_IDInBox_RestoreBoxNo của EQR)
+public class BoxHistoryController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? boxNo)
+    {
+        ViewBag.BoxNo = boxNo;
+        return View(await svc.BoxHistoriesAsync(boxNo));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var h = await svc.GetBoxHistoryAsync(id);
+        if (h == null) return NotFound();
+        return View(h);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var r = await svc.RestoreBoxAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 // Đóng gói hộp vào thùng (nghiệp vụ Map_Can của EQR)
 public class CartonController(IStampService svc) : Controller
 {
