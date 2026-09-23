@@ -41,6 +41,9 @@ public record ShipCancelResult(bool Ok, string Message, int Id, string ShipmentN
 /// <summary>Kết quả gộp phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_Merge).</summary>
 public record ShipMergeResult(bool Ok, string Message, int KeptId, string KeptNo, int MergedCount, int MovedStamps);
 
+/// <summary>Kết quả cho phép sửa phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_UpdFlagAllowModify).</summary>
+public record ShipAllowModifyResult(bool Ok, string Message, int Count, List<string> ShipmentNos);
+
 /// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
 public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
 
@@ -155,6 +158,7 @@ public interface IStampService
     Task<ShipResult> ShipShipmentAsync(int id, string shippedBy);
     Task<ShipCancelResult> CancelShipmentAsync(int id, string? reason, string cancelledBy);
     Task<ShipMergeResult> MergeShipmentsAsync(string refNoSys, string productCode, string userMoveOrder, string mergedBy);
+    Task<ShipAllowModifyResult> AllowModifyShipmentAsync(string refNoSys, string plateNo, int minutes, string by);
     // kích hoạt thông tin sản xuất (InvF_ProductionActive)
     Task<List<ProductLife>> ProductLivesAsync();
     Task<List<ProductionActive>> ProductionActivesAsync();
@@ -985,6 +989,62 @@ public class StampService(AppDbContext db) : IStampService
         return new ShipMergeResult(true,
             $"Đã gộp {mergedCount} phiếu vào {kept.ShipmentNo} (chuyển {movedStamps} tem).",
             kept.Id, kept.ShipmentNo, mergedCount, movedStamps);
+    }
+
+    /// <summary>
+    /// Cho phép sửa phiếu xuất kho theo tem. Mô phỏng nghiệp vụ
+    /// WAS_Inv_VerifiedIDInOut_UpdFlagAllowModify_New20210922 của EQR (zTemp.cs →
+    /// Inv_VerifiedIDInOut_UpdFlagAllowModifyX):
+    /// - Lọc phiếu theo (RefNoSys, PlateNo) — PlateNo được CHUẨN HOÁ nhiễu (bỏ space/'-'/','/'.')
+    ///   rồi so khớp với biển số lưu trên phiếu (đúng cách EQR so khớp QRCodeOS).
+    /// - Chỉ mở khóa được trong THỜI HẠN cho phép (phút) kể từ khi tạo phiếu
+    ///   (Mst_Param INBRAND_MINUTECHECK_UPDPXK) — quá hạn ⇒ từ chối.
+    /// - Mở khóa xong: FlagAllowModify = true + ghi mốc/người mở khóa.
+    /// </summary>
+    public async Task<ShipAllowModifyResult> AllowModifyShipmentAsync(string refNoSys, string plateNo, int minutes, string by)
+    {
+        refNoSys = (refNoSys ?? "").Trim();
+        plateNo = NormalizePlate(plateNo);
+        if (refNoSys.Length == 0) return new ShipAllowModifyResult(false, "Cần nhập RefNoSys (đơn hàng nguồn).", 0, []);
+        if (plateNo.Length == 0) return new ShipAllowModifyResult(false, "Cần nhập biển số xe (PlateNo).", 0, []);
+        if (minutes <= 0) minutes = 60;   // mặc định 60 phút nếu không cấu hình
+
+        // Lọc phiếu theo RefNoSys, rồi so khớp PlateNo đã chuẩn hoá nhiễu
+        var byRef = await db.Shipments
+            .Where(x => x.RefNoSys == refNoSys && x.Status != "CANCEL")
+            .ToListAsync();
+        var matched = byRef.Where(x => NormalizePlate(x.PlateNo) == plateNo).ToList();
+        if (matched.Count == 0)
+            return new ShipAllowModifyResult(false,
+                $"Không tìm thấy phiếu xuất nào có RefNoSys={refNoSys} và biển số {plateNo}.", 0, []);
+
+        // Ràng buộc thời hạn: chỉ mở khóa trong vòng `minutes` phút kể từ khi tạo phiếu
+        var now = DateTime.Now;
+        var inWindow = matched.Where(x => (now - x.CreatedAt).TotalMinutes <= minutes).ToList();
+        if (inWindow.Count == 0)
+            return new ShipAllowModifyResult(false,
+                $"Đã quá thời hạn cho phép sửa phiếu ({minutes} phút kể từ khi tạo).", 0, []);
+
+        foreach (var s in inWindow)
+        {
+            s.FlagAllowModify = true;
+            s.AllowModifyAt = now;
+            s.AllowModifyBy = by;
+        }
+        await db.SaveChangesAsync();
+        return new ShipAllowModifyResult(true,
+            $"Đã cho phép sửa {inWindow.Count} phiếu xuất (RefNoSys={refNoSys}, biển số {plateNo}).",
+            inWindow.Count, inWindow.Select(x => x.ShipmentNo).ToList());
+    }
+
+    // Chuẩn hoá nhiễu biển số: bỏ space/'-'/','/'.' (đúng cách EQR xử lý PlateNo)
+    private static string NormalizePlate(string? plate)
+    {
+        if (string.IsNullOrWhiteSpace(plate)) return "";
+        var sb = new System.Text.StringBuilder();
+        foreach (var ch in plate)
+            if (ch != ' ' && ch != '-' && ch != ',' && ch != '.') sb.Append(ch);
+        return sb.ToString().ToUpperInvariant();
     }
 
     // ── KÍCH HOẠT THÔNG TIN SẢN XUẤT (InvF_ProductionActive) ────────

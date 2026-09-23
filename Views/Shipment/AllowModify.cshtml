@@ -1,0 +1,23 @@
+@{
+    ViewData["Title"] = "Cho phép sửa phiếu xuất kho theo tem";
+}
+<div class="card" style="max-width:760px"><div class="card-body">
+    <h6 class="fw-bold mb-1">Cho phép sửa phiếu xuất kho theo tem (Inv_VerifiedIDInOut_UpdFlagAllowModify)</h6>
+    <p class="text-muted small">
+        Mở khóa (cho phép sửa) các phiếu xuất kho theo tem khớp <b>RefNoSys</b> + <b>biển số xe</b>.
+        Biển số được chuẩn hoá nhiễu (bỏ space, dấu <code>-</code>, <code>,</code>, <code>.</code>) trước khi so khớp.
+        Chỉ mở khóa được trong <b>thời hạn cho phép</b> (phút) kể từ khi tạo phiếu — quá hạn sẽ bị từ chối.
+    </p>
+    <form asp-action="AllowModify" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3 mb-2">
+            <div class="col-md-5"><label class="form-label small text-muted">RefNoSys (đơn hàng nguồn)</label><input name="refNoSys" class="form-control" placeholder="VD: DH-SEED-001" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Biển số xe (PlateNo)</label><input name="plateNo" class="form-control" placeholder="VD: 29C-123.45" /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">Thời hạn (phút)</label><input name="minutes" type="number" min="1" value="60" class="form-control" /></div>
+        </div>
+        <div class="mt-3">
+            <button class="btn btn-primary"><i class="bi bi-unlock me-1"></i>Cho phép sửa</button>
+            <a href="/Shipment" class="btn btn-outline-secondary">Hủy</a>
+        </div>
+    </form>
+</div></div>

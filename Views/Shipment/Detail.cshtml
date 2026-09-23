@@ -20,11 +20,13 @@
             @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
             @if (Model.ShippedAt != null) { <div class="text-muted small">Xuất lúc @Model.ShippedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ShippedBy</div> }
             @if (Model.CancelledAt != null) { <div class="text-muted small">Hủy lúc @Model.CancelledAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.CancelledBy@(string.IsNullOrWhiteSpace(Model.CancelReason) ? "" : " · lý do: " + Model.CancelReason)</div> }
+            @if (Model.FlagAllowModify) { <div class="text-muted small">Cho phép sửa lúc @(Model.AllowModifyAt?.ToString("dd/MM/yyyy HH:mm")) bởi @Model.AllowModifyBy</div> }
         </div>
         <div class="d-flex flex-column align-items-end gap-2">
             @if (Model.Status == "SHIPPED") { <span class="badge bg-success">SHIPPED</span> }
             else if (Model.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
             else { <span class="badge bg-warning text-dark">PENDING</span> }
+            @if (Model.FlagAllowModify) { <span class="badge bg-info text-dark"><i class="bi bi-unlock me-1"></i>Cho phép sửa</span> }
             @if (Model.Status == "PENDING")
             {
                 <form asp-action="Ship" asp-route-id="@Model.Id" method="post">

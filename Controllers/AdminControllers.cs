@@ -504,6 +504,18 @@ public class ShipmentController(IStampService svc) : Controller
         if (!r.Ok) return View();
         return RedirectToAction(nameof(Detail), new { id = r.KeptId });
     }
+
+    // Cho phép sửa phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut_UpdFlagAllowModify của EQR)
+    public IActionResult AllowModify() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AllowModify(string? refNoSys, string? plateNo, int minutes)
+    {
+        var r = await svc.AllowModifyShipmentAsync(refNoSys ?? "", plateNo ?? "", minutes, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 // Xuất kho theo hộp (nghiệp vụ Inv_InventoryVerifiedID_OutByBox của EQR)

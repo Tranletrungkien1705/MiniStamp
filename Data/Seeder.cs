@@ -255,6 +255,18 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
 
+            // 1 phiếu xuất kho ĐÃ CHO PHÉP SỬA mẫu (Inv_VerifiedIDInOut_UpdFlagAllowModify)
+            // — cùng RefNoSys + biển số với phiếu PXK-SEED-001 để demo màn "Cho phép sửa phiếu xuất".
+            var allowShip = new Shipment
+            {
+                ShipmentNo = "PXK-ALLOW-001", CustomerCode = "KH001", CustomerName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                PlateNo = "29C-123.45", DriverName = "Nguyễn Văn A", RefNoSys = "DH-SEED-001", RefType = "SALES",
+                Remark = "Phiếu xuất đã mở khóa sửa (mẫu)", CreatedBy = "seed",
+                Status = "PENDING", FlagAllowModify = true, AllowModifyAt = DateTime.Now, AllowModifyBy = "seed"
+            };
+            db.Shipments.Add(allowShip);
+            await db.SaveChangesAsync();
+
             // 1 phiếu kích hoạt bán hàng mẫu (Inv_InvVerifiedID_ActivateSales) — đã bán 2 tem của lô
             var saTwo = batch.Stamps.Skip(20).Take(2).ToList();
             if (saTwo.Count > 0)
@@ -545,6 +557,10 @@ public static class Seeder
         sql.Add("ALTER TABLE ministamp.\"Stamps\" ADD COLUMN IF NOT EXISTS \"CartonId\" integer NULL");
         sql.Add("ALTER TABLE ministamp.\"Stamps\" ADD COLUMN IF NOT EXISTS \"CartonedAt\" timestamp NULL");
         sql.Add("ALTER TABLE ministamp.\"Cartons\" ADD COLUMN IF NOT EXISTS \"StampCount\" integer NOT NULL DEFAULT 0");
+        // Cho phép sửa phiếu xuất kho theo tem (Inv_VerifiedIDInOut_UpdFlagAllowModify) — cột mới trên Shipments.
+        sql.Add("ALTER TABLE ministamp.\"Shipments\" ADD COLUMN IF NOT EXISTS \"FlagAllowModify\" boolean NOT NULL DEFAULT false");
+        sql.Add("ALTER TABLE ministamp.\"Shipments\" ADD COLUMN IF NOT EXISTS \"AllowModifyAt\" timestamp NULL");
+        sql.Add("ALTER TABLE ministamp.\"Shipments\" ADD COLUMN IF NOT EXISTS \"AllowModifyBy\" text NULL");
         foreach (var s in sql)
             try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
     }

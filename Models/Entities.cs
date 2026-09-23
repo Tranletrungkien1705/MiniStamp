@@ -272,6 +272,12 @@ public class Shipment : IOrgOwned
     public DateTime? MergedAt { get; set; }           // mốc gộp
     public string? MergedBy { get; set; }             // người gộp
 
+    // cho phép sửa phiếu xuất (Inv_VerifiedIDInOut_UpdFlagAllowModify) — nghiệp vụ EQR
+    // FlagAllowModify = '1' ⇒ phiếu được phép sửa (mở khóa) trong thời hạn cho phép.
+    public bool FlagAllowModify { get; set; }         // FlagAllowModify = '1'/'0'
+    public DateTime? AllowModifyAt { get; set; }      // mốc mở khóa sửa phiếu
+    public string? AllowModifyBy { get; set; }        // người mở khóa sửa phiếu
+
     public List<ShipmentLine> Lines { get; set; } = [];
 }
 
