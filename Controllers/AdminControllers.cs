@@ -133,3 +133,34 @@ public class CartonController(IStampService svc) : Controller
         return View(c);
     }
 }
+
+// Phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp của EQR)
+public class BrokenStampController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BrokenStampsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int productId, string? bsNo, string? codes, string? note)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        if (string.IsNullOrWhiteSpace(bsNo)) bsNo = $"BS{DateTime.Now:yyMMddHHmmss}";
+        var r = await svc.ReportBrokenAsync(bsNo.Trim(), productId, list, note, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.BrokenStampId });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var b = await svc.GetBrokenStampAsync(id);
+        if (b == null) return NotFound();
+        return View(b);
+    }
+}

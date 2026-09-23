@@ -18,6 +18,8 @@ public class AppDbContext : DbContext
     public DbSet<Stamp> Stamps => Set<Stamp>();
     public DbSet<ScanLog> ScanLogs => Set<ScanLog>();
     public DbSet<LotteryReward> Rewards => Set<LotteryReward>();
+    public DbSet<BrokenStamp> BrokenStamps => Set<BrokenStamp>();
+    public DbSet<BrokenStampLine> BrokenStampLines => Set<BrokenStampLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -54,6 +56,18 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.CanNo }).IsUnique();
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BrokenStamp>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BsNo }).IsUnique();
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BrokenStampLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ ghi nhận lỗi 1 lần
+            e.HasOne(x => x.BrokenStamp).WithMany(x => x.Lines).HasForeignKey(x => x.BrokenStampId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

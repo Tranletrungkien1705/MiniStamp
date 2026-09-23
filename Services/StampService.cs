@@ -17,6 +17,9 @@ public record PackResult(bool Ok, string Message, int BoxId, string BoxNo, int P
 /// <summary>Kết quả đóng gói hộp vào thùng (nghiệp vụ Map_Can).</summary>
 public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, int Packed);
 
+/// <summary>Kết quả ghi nhận phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp).</summary>
+public record BrokenResult(bool Ok, string Message, int BrokenStampId, string BsNo, int Count);
+
 public interface IStampService
 {
     // admin
@@ -37,6 +40,10 @@ public interface IStampService
     Task<List<Carton>> CartonsAsync();
     Task<Carton?> GetCartonAsync(int id);
     Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
+    // phiếu tem rách/vỡ (InvF_BrokenStamp)
+    Task<List<BrokenStamp>> BrokenStampsAsync();
+    Task<BrokenStamp?> GetBrokenStampAsync(int id);
+    Task<BrokenResult> ReportBrokenAsync(string bsNo, int productId, IEnumerable<string> qrIds, string? note, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -210,6 +217,62 @@ public class StampService(AppDbContext db) : IStampService
     }
 
     // ── CONSUMER (công khai) ─────────────────────────────────────────
+    // ── PHIẾU TEM RÁCH/VỠ (InvF_BrokenStamp) ────────────────────────
+    public Task<List<BrokenStamp>> BrokenStampsAsync() =>
+        db.BrokenStamps.Include(x => x.Product).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<BrokenStamp?> GetBrokenStampAsync(int id) =>
+        db.BrokenStamps.Include(x => x.Product).Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Ghi nhận 1 phiếu tem rách/vỡ (NG). Mô phỏng nghiệp vụ InvF_BrokenStamp của EQR:
+    /// - Mọi tem phải tồn tại trong hệ thống.
+    /// - Tem đã được ghi nhận lỗi ở phiếu khác → từ chối (không ghi trùng).
+    /// - Tem đã vô hiệu (Void) → từ chối.
+    /// - Ghi nhận xong: đánh dấu tem StampStatus.Broken (loại khỏi vòng đời).
+    /// </summary>
+    public async Task<BrokenResult> ReportBrokenAsync(string bsNo, int productId, IEnumerable<string> qrIds, string? note, string createdBy)
+    {
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new BrokenResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new BrokenResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        var voided = stamps.Where(s => s.Status == StampStatus.Void).ToList();
+        if (voided.Count > 0)
+            return new BrokenResult(false, $"{voided.Count} tem đã vô hiệu, không thể ghi nhận lỗi: {string.Join(", ", voided.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        // tem đã được ghi nhận lỗi ở phiếu khác
+        var alreadyBroken = await db.BrokenStampLines.IgnoreQueryFilters()
+            .Where(l => codes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        if (alreadyBroken.Count > 0)
+            return new BrokenResult(false, $"{alreadyBroken.Count} tem đã được ghi nhận lỗi trước đó: {string.Join(", ", alreadyBroken.Take(10))}", 0, "", 0);
+
+        var bs = await db.BrokenStamps.FirstOrDefaultAsync(x => x.BsNo == bsNo);
+        if (bs == null)
+        {
+            bs = new BrokenStamp { BsNo = bsNo, ProductId = productId, Note = note, CreatedBy = createdBy };
+            db.BrokenStamps.Add(bs);
+            await db.SaveChangesAsync();
+        }
+
+        var now = DateTime.Now;
+        foreach (var s in stamps)
+        {
+            bs.Lines.Add(new BrokenStampLine { QrId = s.QrId, BrokenAt = now });
+            s.Status = StampStatus.Broken;
+        }
+        bs.Quantity = await db.BrokenStampLines.CountAsync(l => l.BrokenStampId == bs.Id) + stamps.Count;
+        await db.SaveChangesAsync();
+        return new BrokenResult(true, $"Đã ghi nhận {stamps.Count} tem rách/vỡ vào phiếu {bs.BsNo}.", bs.Id, bs.BsNo, stamps.Count);
+    }
+
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)
     {
         qrId = (qrId ?? "").Trim();
@@ -229,15 +292,16 @@ public class StampService(AppDbContext db) : IStampService
 
         var warnings = new List<string>();
         if (s.Status == StampStatus.Void) warnings.Add("Tem đã bị thu hồi/vô hiệu.");
+        if (s.Status == StampStatus.Broken) warnings.Add("Tem đã được ghi nhận rách/vỡ (NG) — không còn giá trị sử dụng.");
         if (s.ScanCount > 20) warnings.Add($"Tem này đã được quét {s.ScanCount} lần — bất thường, cảnh giác hàng giả sao chép mã.");
         if (s.ActivatedAt != null) warnings.Add($"Tem đã được kích hoạt bảo hành ngày {s.ActivatedAt:dd/MM/yyyy}.");
 
-        var genuine = s.Status != StampStatus.Void;
+        var genuine = s.Status != StampStatus.Void && s.Status != StampStatus.Broken;
         await db.SaveChangesAsync();
 
         return new VerifyResult(true, genuine,
-            genuine ? "SẢN PHẨM CHÍNH HÃNG" : "TEM ĐÃ VÔ HIỆU",
-            genuine ? "Tem hợp lệ do nhà sản xuất phát hành." : "Tem này đã bị thu hồi.",
+            genuine ? "SẢN PHẨM CHÍNH HÃNG" : (s.Status == StampStatus.Broken ? "TEM ĐÃ RÁCH/VỠ" : "TEM ĐÃ VÔ HIỆU"),
+            genuine ? "Tem hợp lệ do nhà sản xuất phát hành." : (s.Status == StampStatus.Broken ? "Tem này đã được ghi nhận rách/vỡ." : "Tem này đã bị thu hồi."),
             s, s.Product, s.Batch, warnings);
     }
 
@@ -248,6 +312,7 @@ public class StampService(AppDbContext db) : IStampService
             .FirstOrDefaultAsync(x => x.QrId == qrId.Trim());
         if (s == null) return (false, "Mã tem không tồn tại.");
         if (s.Status == StampStatus.Void) return (false, "Tem đã vô hiệu.");
+        if (s.Status == StampStatus.Broken) return (false, "Tem đã được ghi nhận rách/vỡ.");
         if (s.ActivatedAt != null) return (false, $"Tem đã kích hoạt bảo hành ngày {s.ActivatedAt:dd/MM/yyyy}.");
 
         s.ActivatedAt = DateTime.Now;
@@ -263,6 +328,7 @@ public class StampService(AppDbContext db) : IStampService
         var s = await db.Stamps.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.QrId == qrId.Trim());
         if (s == null) return (false, "Mã tem không tồn tại.");
         if (s.Status == StampStatus.Void) return (false, "Tem đã vô hiệu.");
+        if (s.Status == StampStatus.Broken) return (false, "Tem đã được ghi nhận rách/vỡ.");
         if (s.HasSpun) return (false, $"Tem này đã quay thưởng: {s.PrizeWon}.");
 
         var rewards = await db.Rewards.IgnoreQueryFilters().Where(r => r.OrgId == s.OrgId && (r.IsLose || r.Stock > 0)).ToListAsync();

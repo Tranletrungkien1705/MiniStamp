@@ -64,6 +64,19 @@ public static class Seeder
             box.CartonedAt = DateTime.Now;
             carton.BoxCount = 1;
             await db.SaveChangesAsync();
+
+            // 1 phiếu tem rách/vỡ mẫu: ghi nhận 2 tem cuối của lô là lỗi (InvF_BrokenStamp)
+            var broken = new BrokenStamp { BsNo = "BS-SEED-001", ProductId = p1.Id, Note = "Tem rách khi dán nhãn", CreatedBy = "seed" };
+            db.BrokenStamps.Add(broken);
+            await db.SaveChangesAsync();
+            var lastTwo = batch.Stamps.Skip(28).Take(2).ToList();
+            foreach (var s in lastTwo)
+            {
+                broken.Lines.Add(new BrokenStampLine { QrId = s.QrId, BrokenAt = DateTime.Now });
+                s.Status = StampStatus.Broken;
+            }
+            broken.Quantity = lastTwo.Count;
+            await db.SaveChangesAsync();
         }
     }
 
@@ -71,7 +84,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

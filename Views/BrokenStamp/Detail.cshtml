@@ -1,0 +1,31 @@
+@model BrokenStamp
+@{
+    ViewData["Title"] = $"Phiếu tem lỗi {Model.BsNo}";
+    var shown = Model.Lines.Take(60).ToList();
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">@Model.Product.Name</h5>
+            <div class="text-muted small">Phiếu <b>@Model.BsNo</b> · <b>@Model.Quantity</b> tem lỗi · ghi nhận lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+            @if (!string.IsNullOrWhiteSpace(Model.Note)) { <div class="text-muted small">Ghi chú: @Model.Note</div> }
+        </div>
+        <a href="/BrokenStamp" class="btn btn-sm btn-outline-primary align-self-start">Danh sách phiếu</a>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Tem lỗi trong phiếu (hiện @shown.Count/@Model.Quantity)</h6>
+    <p class="text-muted small">Các tem này đã bị đánh dấu <b>Broken</b> và bị loại khỏi vòng đời sản phẩm.</p>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Mã tem</th><th>Thời điểm ghi nhận</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in shown)
+        {
+            i++;
+            <tr><td class="text-muted">@i</td><td style="font-family:monospace">@l.QrId</td><td class="small text-muted">@l.BrokenAt.ToString("dd/MM/yyyy HH:mm")</td></tr>
+        }
+        </tbody>
+    </table>
+</div></div>

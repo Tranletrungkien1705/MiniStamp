@@ -10,7 +10,7 @@ public class Org
 }
 public interface IOrgOwned { Guid OrgId { get; set; } }
 
-public enum StampStatus { Generated = 0, Activated = 1, Void = 2 }
+public enum StampStatus { Generated = 0, Activated = 1, Void = 2, Broken = 3 }
 
 // ── Sản phẩm ─────────────────────────────────────────────────────────
 public class Product : IOrgOwned
@@ -108,6 +108,37 @@ public class Stamp : IOrgOwned
     public StampBatch Batch { get; set; } = null!;
     public Product Product { get; set; } = null!;
     public Box? Box { get; set; }
+}
+
+// ── Phiếu tem rách/vỡ (NG) — nghiệp vụ InvF_BrokenStamp của EQR ──────
+// Ghi nhận các tem bị lỗi trong quá trình sản xuất/đóng gói để loại khỏi
+// vòng đời (đánh dấu StampStatus.Broken). 1 phiếu = header + N dòng tem.
+public class BrokenStamp : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BsNo { get; set; } = "";        // mã phiếu (duy nhất trong tenant)
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }              // số tem lỗi đã ghi nhận
+    public string Status { get; set; } = "PENDING"; // PENDING / APPROVED
+    public string? Note { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public MiniStamp.Models.Product Product { get; set; } = null!;
+    public List<BrokenStampLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu tem lỗi (1 tem rách/vỡ) ──────────────────────
+public class BrokenStampLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BrokenStampId { get; set; }
+    public string QrId { get; set; } = "";        // mã tem bị lỗi
+    public DateTime BrokenAt { get; set; } = DateTime.Now;
+
+    public BrokenStamp BrokenStamp { get; set; } = null!;
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────
