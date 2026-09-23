@@ -1,0 +1,27 @@
+@model List<ProductionActive>
+@{ ViewData["Title"] = "Kích hoạt thông tin sản xuất"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Kích hoạt thông tin sản xuất</h6>
+        <a href="/ProductionActive/Create" class="btn btn-sm btn-primary"><i class="bi bi-play-circle me-1"></i>Kích hoạt mới</a>
+    </div>
+    <p class="text-muted small">Ghi nhận 1 lần kích hoạt sản xuất cho 1 lô tem: nguồn gốc, hạn sử dụng và dải serial tem vào/ra. Ngày hết hạn được suy ra tự động = Ngày SX + hạn sử dụng − 1.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã phiếu</th><th>Số tham chiếu</th><th>Sản phẩm</th><th>Nguồn gốc</th><th>Hạn dùng</th><th>Hết hạn</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var p in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/ProductionActive/Detail/@p.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@p.PaNo</td>
+                <td>@p.RefNo</td>
+                <td>@p.Product.Code — @p.Product.Name</td>
+                <td class="small text-muted">@p.Origin</td>
+                <td class="small">@p.ProductLife.Name</td>
+                <td class="small text-muted">@p.ExpiryDate.ToString("dd/MM/yyyy")</td>
+                <td class="small text-muted">@p.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có phiếu kích hoạt nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

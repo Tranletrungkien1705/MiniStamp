@@ -1,0 +1,44 @@
+@model ProductionActive
+@{
+    ViewData["Title"] = $"Kích hoạt SX {Model.PaNo}";
+    var canDelete = (DateTime.Now - Model.CreatedAt).TotalHours <= 72;
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Kích hoạt thông tin sản xuất <span style="font-family:monospace">@Model.PaNo</span></h5>
+            <div class="text-muted small">
+                Số tham chiếu <b>@Model.RefNo</b> · tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy
+            </div>
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <span class="badge bg-success">ACTIVE</span>
+            @if (canDelete)
+            {
+                <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Xóa phiếu kích hoạt này?');">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa (trong 72h)</button>
+                </form>
+            }
+            else
+            {
+                <span class="text-muted small">Quá 72h — không thể xóa</span>
+            }
+            <a href="/ProductionActive" class="btn btn-sm btn-outline-primary">Danh sách</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Thông tin kích hoạt</h6>
+    <div class="row g-3">
+        <div class="col-md-6"><div class="text-muted small">Sản phẩm</div><div class="fw-semibold">@Model.Product.Code — @Model.Product.Name</div></div>
+        <div class="col-md-6"><div class="text-muted small">Nguồn gốc</div><div class="fw-semibold">@Model.Origin</div></div>
+        <div class="col-md-4"><div class="text-muted small">Hạn sử dụng</div><div class="fw-semibold">@Model.ProductLife.Name (@Model.ProductLife.ValueByDay ngày)</div></div>
+        <div class="col-md-4"><div class="text-muted small">Ngày sản xuất</div><div class="fw-semibold">@Model.ProductDate.ToString("dd/MM/yyyy")</div></div>
+        <div class="col-md-4"><div class="text-muted small">Ngày hết hạn</div><div class="fw-semibold text-danger">@Model.ExpiryDate.ToString("dd/MM/yyyy")</div></div>
+        <div class="col-md-4"><div class="text-muted small">Số lượng kế hoạch</div><div class="fw-semibold">@Model.QtyPlan.ToString("N0")</div></div>
+        <div class="col-md-4"><div class="text-muted small">Dải serial tem vào SX</div><div class="fw-semibold" style="font-family:monospace">@Model.ListSerialInManufacture</div></div>
+        <div class="col-md-4"><div class="text-muted small">Dải serial tem ra SX</div><div class="fw-semibold" style="font-family:monospace">@(string.IsNullOrWhiteSpace(Model.ListSerialOutManufacture) ? "—" : Model.ListSerialOutManufacture)</div></div>
+    </div>
+</div></div>

@@ -26,6 +26,19 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục hạn sử dụng (Mst_ProductLife) — master data cho kích hoạt SX
+        if (!await db.ProductLives.AnyAsync())
+        {
+            db.ProductLives.AddRange(
+                new ProductLife { Code = "1DAY", Name = "1 ngày", Type = "DAY", Value = 1, ValueByDay = 1 },
+                new ProductLife { Code = "3DAY", Name = "3 ngày", Type = "DAY", Value = 3, ValueByDay = 3 },
+                new ProductLife { Code = "1WEEK", Name = "1 tuần", Type = "WEEK", Value = 1, ValueByDay = 7 },
+                new ProductLife { Code = "1MONTH", Name = "1 tháng", Type = "MONTH", Value = 1, ValueByDay = 30 },
+                new ProductLife { Code = "3MONTH", Name = "3 tháng", Type = "MONTH", Value = 3, ValueByDay = 90 },
+                new ProductLife { Code = "1YEAR", Name = "1 năm", Type = "MONTH", Value = 12, ValueByDay = 365 });
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Products.AnyAsync())
         {
             var p1 = new Product { Code = "SP001", Name = "Phân bón NPK Lâm Thao 20kg", Manufacturer = "Supe Lâm Thao", WarrantyMonths = 0, Description = "Phân bón tổng hợp NPK." };
@@ -105,6 +118,22 @@ public static class Seeder
                 s.CustomerCode = ship.CustomerCode;
             }
             await db.SaveChangesAsync();
+
+            // 1 phiếu kích hoạt thông tin sản xuất mẫu (InvF_ProductionActive)
+            var life = await db.ProductLives.FirstOrDefaultAsync(x => x.Code == "1MONTH");
+            if (life != null)
+            {
+                var pDate = DateTime.Today.AddDays(-5);
+                db.ProductionActives.Add(new ProductionActive
+                {
+                    PaNo = "PA-SEED-001", RefNo = "DH-SEED-001", Origin = "Trang trại VietGAP 1030",
+                    ProductId = p1.Id, QtyPlan = 1000, ProductDate = pDate,
+                    ExpiryDate = pDate.AddDays(life.Value - 1), ProductLifeId = life.Id,
+                    ListSerialInManufacture = "000001-001000", ListSerialOutManufacture = "000001-001000",
+                    CreatedBy = "seed"
+                });
+                await db.SaveChangesAsync();
+            }
         }
     }
 
@@ -112,7 +141,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

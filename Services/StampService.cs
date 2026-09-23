@@ -26,6 +26,9 @@ public record InvInResult(bool Ok, string Message, int Id, string InvInNo, int T
 /// <summary>Kết quả tạo/xuất phiếu xuất kho theo tem (nghiệp vụ Inv_VerifiedIDInOut).</summary>
 public record ShipResult(bool Ok, string Message, int Id, string ShipmentNo, int TotalQty);
 
+/// <summary>Kết quả kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive).</summary>
+public record PaResult(bool Ok, string Message, int Id, string PaNo, DateTime ExpiryDate);
+
 public interface IStampService
 {
     // admin
@@ -60,6 +63,13 @@ public interface IStampService
     Task<Shipment?> GetShipmentAsync(int id);
     Task<ShipResult> CreateShipmentAsync(Shipment header, IEnumerable<string> qrIds, string createdBy);
     Task<ShipResult> ShipShipmentAsync(int id, string shippedBy);
+    // kích hoạt thông tin sản xuất (InvF_ProductionActive)
+    Task<List<ProductLife>> ProductLivesAsync();
+    Task<List<ProductionActive>> ProductionActivesAsync();
+    Task<ProductionActive?> GetProductionActiveAsync(int id);
+    Task<PaResult> CreateProductionActiveAsync(string paNo, string refNo, string origin, int productId,
+        int qtyPlan, DateTime productDate, int productLifeId, string listSerialIn, string listSerialOut, string createdBy);
+    Task<PaResult> DeleteProductionActiveAsync(int id);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -426,6 +436,87 @@ public class StampService(AppDbContext db) : IStampService
         sh.ShippedBy = shippedBy;
         await db.SaveChangesAsync();
         return new ShipResult(true, $"Đã xuất phiếu {sh.ShipmentNo} ({stamps.Count} tem).", sh.Id, sh.ShipmentNo, stamps.Count);
+    }
+
+    // ── KÍCH HOẠT THÔNG TIN SẢN XUẤT (InvF_ProductionActive) ────────
+    public Task<List<ProductLife>> ProductLivesAsync() =>
+        db.ProductLives.OrderBy(x => x.ValueByDay).ToListAsync();
+
+    public Task<List<ProductionActive>> ProductionActivesAsync() =>
+        db.ProductionActives.Include(x => x.Product).Include(x => x.ProductLife)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<ProductionActive?> GetProductionActiveAsync(int id) =>
+        db.ProductionActives.Include(x => x.Product).Include(x => x.ProductLife)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Kích hoạt thông tin sản xuất cho 1 lô tem. Mô phỏng nghiệp vụ
+    /// InvF_ProductionActive_Save của EQR:
+    /// - RefNo bắt buộc và không được trùng với phiếu khác.
+    /// - Origin (nguồn gốc) bắt buộc.
+    /// - Sản phẩm phải tồn tại; hạn sử dụng (ProductLife) phải tồn tại.
+    /// - Ngày hết hạn = Ngày SX + ProductLifeValue - 1 (tự suy ra, không nhận từ client).
+    /// - Dải serial tem vào SX bắt buộc.
+    /// </summary>
+    public async Task<PaResult> CreateProductionActiveAsync(string paNo, string refNo, string origin, int productId,
+        int qtyPlan, DateTime productDate, int productLifeId, string listSerialIn, string listSerialOut, string createdBy)
+    {
+        refNo = (refNo ?? "").Trim();
+        origin = (origin ?? "").Trim();
+        listSerialIn = (listSerialIn ?? "").Trim();
+        listSerialOut = (listSerialOut ?? "").Trim();
+
+        if (string.IsNullOrWhiteSpace(refNo))
+            return new PaResult(false, "Số tham chiếu (RefNo) không được để trống.", 0, "", default);
+        if (string.IsNullOrWhiteSpace(origin))
+            return new PaResult(false, "Nguồn gốc (Origin) không được để trống.", 0, "", default);
+        if (string.IsNullOrWhiteSpace(listSerialIn))
+            return new PaResult(false, "Dải serial tem vào sản xuất không được để trống.", 0, "", default);
+
+        var product = await db.Products.FirstOrDefaultAsync(p => p.Id == productId);
+        if (product == null) return new PaResult(false, "Sản phẩm không tồn tại.", 0, "", default);
+
+        var life = await db.ProductLives.FirstOrDefaultAsync(x => x.Id == productLifeId);
+        if (life == null) return new PaResult(false, "Hạn sử dụng không tồn tại.", 0, "", default);
+
+        if (await db.ProductionActives.AnyAsync(x => x.RefNo == refNo))
+            return new PaResult(false, $"Số tham chiếu {refNo} đã được dùng ở phiếu khác.", 0, "", default);
+
+        if (string.IsNullOrWhiteSpace(paNo)) paNo = $"PA{DateTime.Now:yyMMddHHmmss}";
+        paNo = paNo.Trim();
+        if (await db.ProductionActives.AnyAsync(x => x.PaNo == paNo))
+            return new PaResult(false, $"Mã phiếu {paNo} đã tồn tại.", 0, "", default);
+
+        if (productDate == default) productDate = DateTime.Today;
+        // Ngày hết hạn = Ngày SX + ProductLifeValue - 1 (đúng công thức EQR)
+        var expiry = productDate.AddDays(Math.Max(life.Value, 1) - 1);
+
+        var pa = new ProductionActive
+        {
+            PaNo = paNo, RefNo = refNo, Origin = origin, ProductId = productId,
+            QtyPlan = qtyPlan, ProductDate = productDate, ExpiryDate = expiry,
+            ProductLifeId = productLifeId, ListSerialInManufacture = listSerialIn,
+            ListSerialOutManufacture = listSerialOut, CreatedBy = createdBy
+        };
+        db.ProductionActives.Add(pa);
+        await db.SaveChangesAsync();
+        return new PaResult(true, $"Đã kích hoạt thông tin sản xuất {pa.PaNo} — hết hạn {expiry:dd/MM/yyyy}.", pa.Id, pa.PaNo, expiry);
+    }
+
+    /// <summary>
+    /// Xóa phiếu kích hoạt. Mô phỏng ràng buộc EQR: chỉ cho xóa trong 72h kể từ khi tạo.
+    /// </summary>
+    public async Task<PaResult> DeleteProductionActiveAsync(int id)
+    {
+        var pa = await db.ProductionActives.FirstOrDefaultAsync(x => x.Id == id);
+        if (pa == null) return new PaResult(false, "Không tìm thấy phiếu kích hoạt.", 0, "", default);
+        if ((DateTime.Now - pa.CreatedAt).TotalHours > 72)
+            return new PaResult(false, $"Phiếu {pa.PaNo} đã tạo quá 72 giờ, không thể xóa.", pa.Id, pa.PaNo, pa.ExpiryDate);
+
+        db.ProductionActives.Remove(pa);
+        await db.SaveChangesAsync();
+        return new PaResult(true, $"Đã xóa phiếu kích hoạt {pa.PaNo}.", 0, pa.PaNo, pa.ExpiryDate);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

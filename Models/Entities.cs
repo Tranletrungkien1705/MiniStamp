@@ -228,6 +228,46 @@ public class InventoryInFGDtl : IOrgOwned
     public Product Product { get; set; } = null!;
 }
 
+// ── Hạn sử dụng (Mst_ProductLife) — danh mục master data ─────────────
+// Nghiệp vụ EQR: mỗi sản phẩm có 1 "hạn sử dụng" (ProductLifeCode).
+// ProductLifeValue = số đơn vị (ngày/tuần/tháng), ProductLifeValueByDay = quy đổi ra ngày.
+public class ProductLife : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";        // ProductLifeCode — vd 1MONTH
+    public string Name { get; set; } = "";        // ProductLifeName — vd "1 tháng"
+    public string Type { get; set; } = "DAY";     // DAY / WEEK / MONTH
+    public int Value { get; set; } = 1;            // ProductLifeValue
+    public int ValueByDay { get; set; } = 1;       // ProductLifeValueByDay (quy đổi ra ngày)
+}
+
+// ── Kích hoạt thông tin sản xuất (InvF_ProductionActive) ─────────────
+// Nghiệp vụ EQR: ghi nhận 1 lần kích hoạt sản xuất cho 1 lô tem — gắn
+// nguồn gốc (Origin), hạn sử dụng (ProductLifeCode) và dải serial tem vào/ra.
+// Ràng buộc: RefNo bắt buộc + duy nhất; Origin bắt buộc; sản phẩm + hạn dùng phải tồn tại;
+// Ngày hết hạn = Ngày SX + ProductLifeValue - 1; chỉ xóa trong 72h kể từ khi tạo.
+public class ProductionActive : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaNo { get; set; } = "";        // IF_PANo — mã phiếu kích hoạt (duy nhất trong tenant)
+    public string RefNo { get; set; } = "";       // số tham chiếu (bắt buộc, duy nhất)
+    public string Origin { get; set; } = "";      // nguồn gốc (tên trang trại / mã nguồn gốc)
+    public int ProductId { get; set; }
+    public int QtyPlan { get; set; }               // số lượng kế hoạch
+    public DateTime ProductDate { get; set; } = DateTime.Today;   // ngày sản xuất
+    public DateTime ExpiryDate { get; set; } = DateTime.Today;    // ngày hết hạn (suy ra)
+    public int ProductLifeId { get; set; }         // hạn sử dụng đã chọn
+    public string ListSerialInManufacture { get; set; } = "";   // dải serial tem vào SX
+    public string ListSerialOutManufacture { get; set; } = "";  // dải serial tem ra SX
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+    public ProductLife ProductLife { get; set; } = null!;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {

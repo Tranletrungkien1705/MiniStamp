@@ -24,6 +24,8 @@ public class AppDbContext : DbContext
     public DbSet<InventoryInFGDtl> InventoryInFGDtls => Set<InventoryInFGDtl>();
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
+    public DbSet<ProductLife> ProductLives => Set<ProductLife>();
+    public DbSet<ProductionActive> ProductionActives => Set<ProductionActive>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -96,6 +98,19 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ xuất 1 lần
             e.HasOne(x => x.Shipment).WithMany(x => x.Lines).HasForeignKey(x => x.ShipmentId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductLife>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductionActive>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PaNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.RefNo }).IsUnique();   // RefNo duy nhất trong tenant
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasOne(x => x.ProductLife).WithMany().HasForeignKey(x => x.ProductLifeId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

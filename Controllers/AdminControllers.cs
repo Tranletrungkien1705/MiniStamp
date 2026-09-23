@@ -254,3 +254,43 @@ public class ShipmentController(IStampService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Kích hoạt thông tin sản xuất (nghiệp vụ InvF_ProductionActive của EQR)
+public class ProductionActiveController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProductionActivesAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        ViewBag.ProductLives = await svc.ProductLivesAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? paNo, string? refNo, string? origin, int productId,
+        int qtyPlan, DateTime productDate, int productLifeId, string? listSerialIn, string? listSerialOut)
+    {
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); ViewBag.ProductLives = await svc.ProductLivesAsync(); return View(); }
+        var r = await svc.CreateProductionActiveAsync(paNo ?? "", refNo ?? "", origin ?? "", productId,
+            qtyPlan, productDate, productLifeId, listSerialIn ?? "", listSerialOut ?? "", "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); ViewBag.ProductLives = await svc.ProductLivesAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var pa = await svc.GetProductionActiveAsync(id);
+        if (pa == null) return NotFound();
+        return View(pa);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var r = await svc.DeleteProductionActiveAsync(id);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Index));
+    }
+}
