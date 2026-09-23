@@ -498,6 +498,27 @@ public static class Seeder
                 tbhStamp.CustomerCode = "KH003";
                 await db.SaveChangesAsync();
             }
+
+            // 1 lần cập nhật ngày sản xuất mẫu (Inv_InventoryVerifiedID_UpdPrdDTime)
+            // — gán ngày SX cho 3 tem đầu lô để demo màn Cập nhật ngày SX.
+            var prdStamps = batch.Stamps.Take(3).ToList();
+            if (prdStamps.Count > 0)
+            {
+                var prdDate = DateTime.Today.AddDays(-10).AddHours(8);
+                var prdLog = new StampProductionDateLog
+                {
+                    LogNo = $"PRDD.{DateTime.Now:yyyyMMdd.HHmmss.ffff}",
+                    ProductionDTime = prdDate, Quantity = prdStamps.Count,
+                    Remark = "Chỉnh lại ngày SX lô mẫu", CreatedBy = "seed"
+                };
+                foreach (var s in prdStamps)
+                {
+                    prdLog.Lines.Add(new StampProductionDateLogLine { QrId = s.QrId, OldProductionDTime = s.ProductionDTime });
+                    s.ProductionDTime = prdDate;
+                }
+                db.StampProductionDateLogs.Add(prdLog);
+                await db.SaveChangesAsync();
+            }
         }
     }
 
@@ -505,7 +526,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "InventorySecrets", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods", "BoxShipments", "BoxShipmentLines", "StampUsers", "StampUserLines", "TbhActivations" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "BoxHistories", "BoxHistoryLines", "StampPairs", "Stamps", "ScanLogs", "WarrantyActivations", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "ProductionSessions", "ProductionSessionLines", "OriginCatalogs", "Gs1Locations", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls", "BlockTypes", "Blocks", "BlockLines", "NeutralStamps", "InventorySecrets", "ReqInvOuts", "ReqInvOutDtls", "StampLifecyclePeriods", "BoxShipments", "BoxShipmentLines", "StampUsers", "StampUserLines", "TbhActivations", "StampProductionDateLogs", "StampProductionDateLogLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

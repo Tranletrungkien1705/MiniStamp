@@ -58,6 +58,8 @@ public class AppDbContext : DbContext
     public DbSet<StampUser> StampUsers => Set<StampUser>();
     public DbSet<StampUserLine> StampUserLines => Set<StampUserLine>();
     public DbSet<TbhActivation> TbhActivations => Set<TbhActivation>();
+    public DbSet<StampProductionDateLog> StampProductionDateLogs => Set<StampProductionDateLog>();
+    public DbSet<StampProductionDateLogLine> StampProductionDateLogLines => Set<StampProductionDateLogLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -323,6 +325,16 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.TbhNo }).IsUnique();   // mã phiếu kích hoạt TBH duy nhất trong tenant
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StampProductionDateLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.LogNo }).IsUnique();   // mã bản ghi lịch sử duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StampProductionDateLogLine>(e =>
+        {
+            e.HasOne(x => x.StampProductionDateLog).WithMany(x => x.Lines).HasForeignKey(x => x.StampProductionDateLogId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

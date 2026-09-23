@@ -160,6 +160,9 @@ public class Stamp : IOrgOwned
     public string? WarrantyLat { get; set; }          // MapLatitude — vĩ độ lúc kích hoạt
     public string? WarrantyLong { get; set; }         // MapLongitude — kinh độ lúc kích hoạt
 
+    // ngày sản xuất (ProductionDTimeUTC) — nghiệp vụ Inv_InventoryVerifiedID_UpdPrdDTime
+    public DateTime? ProductionDTime { get; set; }
+
     // chống giả: đếm số lần quét + mốc
     public int ScanCount { get; set; }
     public DateTime? FirstScanAt { get; set; }
@@ -485,6 +488,43 @@ public class BlockLine : IOrgOwned
     public DateTime AddedAt { get; set; } = DateTime.Now;
 
     public Block Block { get; set; } = null!;
+}
+
+// ── Cập nhật ngày sản xuất cho tem (Inv_InventoryVerifiedID_UpdPrdDTime) ──
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InventoryVerifiedID_UpdPrdDTime →
+// Inv_InventoryVerifiedID_UpdPrdDTimeX, file zTemp.cs): cập nhật lại NGÀY SẢN XUẤT
+// (ProductionDTimeUTC) cho 1 danh sách tem đã ghép sản phẩm — dùng khi xưởng nhập
+// sai/thiếu ngày SX và cần chỉnh lại hàng loạt. Mỗi lần cập nhật ghi 1 bản ghi
+// lịch sử (tương ứng Inv_InventoryVerifiedIDHist của EQR) để truy vết.
+// Ràng buộc EQR:
+//  - Danh sách tem không được rỗng.
+//  - Mọi IDNo phải tồn tại trong kho tem (InvalidIDNo).
+//  - Ngày SX rỗng ⇒ lấy thời điểm hiện tại.
+//  - Cập nhật ProductionDTimeUTC + ghi log (LogLUDTimeUTC/LogLUBy).
+public class StampProductionDateLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string LogNo { get; set; } = "";          // IInvVIDHistNo — mã bản ghi lịch sử
+    public DateTime ProductionDTime { get; set; } = DateTime.Now;  // ProductionDTimeUTC — ngày SX được gán
+    public int Quantity { get; set; }                  // số tem đã cập nhật
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<StampProductionDateLogLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết lịch sử cập nhật ngày SX (1 tem) ───────────────────
+public class StampProductionDateLogLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StampProductionDateLogId { get; set; }
+    public string QrId { get; set; } = "";           // IDNo — mã tem đã cập nhật
+    public DateTime? OldProductionDTime { get; set; }  // ngày SX trước khi sửa
+
+    public StampProductionDateLog StampProductionDateLog { get; set; } = null!;
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────

@@ -97,6 +97,9 @@ public record StampUserResult(bool Ok, string Message, int Id, string SuiNo, int
 /// <summary>Kết quả kích hoạt tem trắng bởi Trạm bán hàng (nghiệp vụ Inv_InventoryVerifiedID_ActivateByTBH).</summary>
 public record TbhResult(bool Ok, string Message, int Id, string TbhNo, string QrId);
 
+/// <summary>Kết quả cập nhật ngày sản xuất cho tem (nghiệp vụ Inv_InventoryVerifiedID_UpdPrdDTime).</summary>
+public record PrdDTimeResult(bool Ok, string Message, int Id, string LogNo, int Updated, DateTime ProductionDTime);
+
 public interface IStampService
 {
     // admin
@@ -241,8 +244,12 @@ public interface IStampService
     // kích hoạt tem trắng bởi Trạm bán hàng (Inv_InventoryVerifiedID_ActivateByTBH)
     Task<List<TbhActivation>> TbhActivationsAsync();
     Task<TbhActivation?> GetTbhActivationAsync(int id);
-    Task<TbhResult> ActivateByTbhAsync(string qrId, string? pin, int productId, string? customerCode,
-        string? areaCode, string? proofImagePath, string? proofImagePathName, string? remark, string createdBy);
+    Task<TbhResult> ActivateByTbhAsync(string qrId, string? pin, int productId, string? customerCode, string? areaCode,
+        string? proofImagePath, string? proofImagePathName, string? remark, string createdBy);
+    // cập nhật ngày sản xuất cho tem (Inv_InventoryVerifiedID_UpdPrdDTime)
+    Task<List<StampProductionDateLog>> ProductionDateLogsAsync();
+    Task<StampProductionDateLog?> GetProductionDateLogAsync(int id);
+    Task<PrdDTimeResult> UpdateProductionDateAsync(DateTime? productionDTime, IEnumerable<string> qrIds, string? remark, string createdBy);
 }
 
 public class StampService(AppDbContext db) : IStampService
@@ -2497,5 +2504,67 @@ public class StampService(AppDbContext db) : IStampService
         await db.SaveChangesAsync();
 
         return new TbhResult(true, $"Đã kích hoạt tem trắng {stamp.QrId} bởi Trạm bán hàng ({tbh.TbhNo}).", tbh.Id, tbh.TbhNo, stamp.QrId);
+    }
+
+    // ── CẬP NHẬT NGÀY SẢN XUẤT CHO TEM (Inv_InventoryVerifiedID_UpdPrdDTime) ──
+    public Task<List<StampProductionDateLog>> ProductionDateLogsAsync() =>
+        db.StampProductionDateLogs.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).Take(500).ToListAsync();
+
+    public Task<StampProductionDateLog?> GetProductionDateLogAsync(int id) =>
+        db.StampProductionDateLogs.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Cập nhật NGÀY SẢN XUẤT (ProductionDTimeUTC) cho 1 danh sách tem. Mô phỏng
+    /// nghiệp vụ WAS_Inv_InventoryVerifiedID_UpdPrdDTime → Inv_InventoryVerifiedID_UpdPrdDTimeX
+    /// của EQR (zTemp.cs):
+    /// - Danh sách tem không được rỗng.
+    /// - Mọi IDNo phải tồn tại trong kho tem (InvalidIDNo).
+    /// - Ngày SX rỗng ⇒ lấy thời điểm hiện tại.
+    /// - Cập nhật ProductionDTimeUTC + ghi log (LogLUDTimeUTC/LogLUBy).
+    /// - Ghi 1 bản ghi lịch sử (tương ứng Inv_InventoryVerifiedIDHist) để truy vết.
+    /// </summary>
+    public async Task<PrdDTimeResult> UpdateProductionDateAsync(DateTime? productionDTime, IEnumerable<string> qrIds,
+        string? remark, string createdBy)
+    {
+        // Ngày SX rỗng ⇒ lấy thời điểm hiện tại (đúng EQR).
+        var prdDTime = productionDTime ?? DateTime.Now;
+
+        // Chuẩn hoá danh sách tem: bỏ rỗng, chống trùng, giữ thứ tự.
+        var list = (qrIds ?? []).Select(x => (x ?? "").Trim())
+            .Where(x => x.Length > 0).Distinct().ToList();
+        if (list.Count == 0)
+            return new PrdDTimeResult(false, "Phải có ít nhất 1 tem (IDNo) để cập nhật ngày sản xuất.", 0, "", 0, prdDTime);
+
+        // Mọi IDNo phải tồn tại trong kho tem (InvalidIDNo).
+        var stamps = await db.Stamps.Where(s => list.Contains(s.QrId)).ToListAsync();
+        var found = stamps.Select(s => s.QrId).ToHashSet();
+        var missing = list.Where(x => !found.Contains(x)).ToList();
+        if (missing.Count > 0)
+            return new PrdDTimeResult(false, $"Tem không tồn tại trong kho tem: {string.Join(", ", missing)}.", 0, "", 0, prdDTime);
+
+        var now = DateTime.Now;
+        var logNo = $"PRDD.{now:yyyyMMdd.HHmmss.ffff}";
+        var log = new StampProductionDateLog
+        {
+            LogNo = logNo,
+            ProductionDTime = prdDTime,
+            Quantity = stamps.Count,
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+
+        // Cập nhật ngày SX + ghi log trên từng tem; lưu lại ngày cũ vào lịch sử.
+        foreach (var s in stamps)
+        {
+            log.Lines.Add(new StampProductionDateLogLine { QrId = s.QrId, OldProductionDTime = s.ProductionDTime });
+            s.ProductionDTime = prdDTime;
+        }
+
+        db.StampProductionDateLogs.Add(log);
+        await db.SaveChangesAsync();
+
+        return new PrdDTimeResult(true,
+            $"Đã cập nhật ngày sản xuất {prdDTime:dd/MM/yyyy HH:mm} cho {stamps.Count} tem.",
+            log.Id, log.LogNo, stamps.Count, prdDTime);
     }
 }

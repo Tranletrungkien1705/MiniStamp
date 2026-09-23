@@ -1093,3 +1093,28 @@ public class TbhActivationController(IStampService svc) : Controller
         return View(t);
     }
 }
+
+// Cập nhật ngày sản xuất cho tem (nghiệp vụ Inv_InventoryVerifiedID_UpdPrdDTime của EQR)
+public class ProductionDateController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProductionDateLogsAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(DateTime? productionDTime, string? codes, string? remark)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        var r = await svc.UpdateProductionDateAsync(productionDTime, list, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var log = await svc.GetProductionDateLogAsync(id);
+        if (log == null) return NotFound();
+        return View(log);
+    }
+}

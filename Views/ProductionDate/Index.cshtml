@@ -1,0 +1,25 @@
+@model List<StampProductionDateLog>
+@{ ViewData["Title"] = "Cập nhật ngày sản xuất"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Lịch sử cập nhật ngày sản xuất</h6>
+        <a href="/ProductionDate/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle me-1"></i>Cập nhật ngày SX</a>
+    </div>
+    <p class="text-muted small">Cập nhật lại <b>ngày sản xuất</b> (ProductionDTimeUTC) cho 1 danh sách tem đã ghép sản phẩm — dùng khi xưởng nhập sai/thiếu ngày SX và cần chỉnh lại hàng loạt. Mỗi lần cập nhật ghi 1 bản ghi lịch sử để truy vết.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã lịch sử</th><th>Ngày SX được gán</th><th>Số tem</th><th>Người cập nhật</th><th>Thời điểm</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/ProductionDate/Detail/@l.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@l.LogNo</td>
+                <td class="fw-semibold">@l.ProductionDTime.ToString("dd/MM/yyyy HH:mm")</td>
+                <td>@l.Quantity.ToString("N0")</td>
+                <td class="small">@l.CreatedBy</td>
+                <td class="small text-muted">@l.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có lần cập nhật ngày sản xuất nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
