@@ -1,0 +1,29 @@
+@model Box
+@{
+    ViewData["Title"] = $"Hộp {Model.BoxNo}";
+    var shown = Model.Stamps.Take(48).ToList();
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">@Model.Product.Name</h5>
+            <div class="text-muted small">Hộp <b>@Model.BoxNo</b> · <b>@Model.Quantity</b> tem · đóng lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+        </div>
+        <a href="/Box" class="btn btn-sm btn-outline-primary align-self-start">Danh sách hộp</a>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Tem trong hộp (hiện @shown.Count/@Model.Quantity)</h6>
+    <p class="text-muted small">Mỗi tem là 1 QR duy nhất. Hộp gom nhiều tem con để quản lý đóng gói &amp; xuất kho theo hộp.</p>
+    <div class="row g-3">
+        @foreach (var s in shown)
+        {
+            <div class="col-6 col-md-3 col-lg-2 text-center">
+                <img src="/Stamp/Qr?code=@s.QrId&px=4" class="img-fluid border rounded" style="max-width:110px" alt="QR" />
+                <div class="small mt-1" style="font-family:monospace">@s.QrId</div>
+                <div class="text-muted" style="font-size:10px">PIN: @s.Pin</div>
+            </div>
+        }
+    </div>
+</div></div>

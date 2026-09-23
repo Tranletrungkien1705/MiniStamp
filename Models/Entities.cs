@@ -41,6 +41,21 @@ public class StampBatch : IOrgOwned
     public List<Stamp> Stamps { get; set; } = [];
 }
 
+// ── Hộp (đóng gói N tem con vào 1 hộp — nghiệp vụ Map_IDInBox của EQR) ─
+public class Box : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BoxNo { get; set; } = "";       // mã hộp (duy nhất trong tenant)
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }              // số tem đã đóng vào hộp
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+    public List<Stamp> Stamps { get; set; } = [];
+}
+
 // ── Tem (mỗi con tem = 1 QR duy nhất toàn cục) ───────────────────────
 public class Stamp : IOrgOwned
 {
@@ -51,6 +66,10 @@ public class Stamp : IOrgOwned
     public int BatchId { get; set; }
     public int ProductId { get; set; }
     public StampStatus Status { get; set; } = StampStatus.Generated;
+
+    // đóng gói: tem thuộc hộp nào (null = chưa đóng hộp)
+    public int? BoxId { get; set; }
+    public DateTime? BoxedAt { get; set; }
 
     // kích hoạt bảo hành (người dùng cuối)
     public DateTime? ActivatedAt { get; set; }
@@ -68,6 +87,7 @@ public class Stamp : IOrgOwned
 
     public StampBatch Batch { get; set; } = null!;
     public Product Product { get; set; } = null!;
+    public Box? Box { get; set; }
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────

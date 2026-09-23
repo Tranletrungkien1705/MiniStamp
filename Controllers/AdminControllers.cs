@@ -71,3 +71,34 @@ public class StampController(IStampService svc) : Controller
         return File(QrService.PngBytes(url, px), "image/png");
     }
 }
+
+// Đóng gói tem vào hộp (nghiệp vụ Map_IDInBox của EQR)
+public class BoxController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BoxesAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int productId, string? boxNo, string? codes)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        if (string.IsNullOrWhiteSpace(boxNo)) boxNo = $"BOX{DateTime.Now:yyMMddHHmmss}";
+        var r = await svc.PackBoxAsync(boxNo.Trim(), productId, list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.BoxId });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var b = await svc.GetBoxAsync(id);
+        if (b == null) return NotFound();
+        return View(b);
+    }
+}

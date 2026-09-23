@@ -46,6 +46,15 @@ public static class Seeder
                 });
             db.Batches.Add(batch);
             await db.SaveChangesAsync();
+
+            // 1 hộp mẫu: đóng 5 tem đầu của lô vào hộp để demo nghiệp vụ đóng gói
+            var box = new Box { BoxNo = "BOX-SEED-001", ProductId = p1.Id, CreatedBy = "seed" };
+            db.Boxes.Add(box);
+            await db.SaveChangesAsync();
+            var firstFive = batch.Stamps.Take(5).ToList();
+            foreach (var s in firstFive) { s.BoxId = box.Id; s.BoxedAt = DateTime.Now; }
+            box.Quantity = firstFive.Count;
+            await db.SaveChangesAsync();
         }
     }
 
@@ -53,7 +62,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Stamps", "ScanLogs", "Rewards" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Stamps", "ScanLogs", "Rewards" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

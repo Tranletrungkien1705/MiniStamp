@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Org> Orgs => Set<Org>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<StampBatch> Batches => Set<StampBatch>();
+    public DbSet<Box> Boxes => Set<Box>();
     public DbSet<Stamp> Stamps => Set<Stamp>();
     public DbSet<ScanLog> ScanLogs => Set<ScanLog>();
     public DbSet<LotteryReward> Rewards => Set<LotteryReward>();
@@ -37,6 +38,13 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => x.QrId).IsUnique();          // QR duy nhất TOÀN CỤC (tra cứu công khai theo QrId)
             e.HasOne(x => x.Batch).WithMany(x => x.Stamps).HasForeignKey(x => x.BatchId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasOne(x => x.Box).WithMany(x => x.Stamps).HasForeignKey(x => x.BoxId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Box>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BoxNo }).IsUnique();
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

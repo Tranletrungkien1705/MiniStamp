@@ -11,6 +11,9 @@ public record StampDash(int Products, int Batches, int Stamps, int Activated, in
 public record VerifyResult(bool Found, bool Genuine, string Title, string Message,
     Stamp? Stamp, Product? Product, StampBatch? Batch, List<string> Warnings);
 
+/// <summary>Kết quả đóng gói tem vào hộp (nghiệp vụ Map_IDInBox).</summary>
+public record PackResult(bool Ok, string Message, int BoxId, string BoxNo, int Packed);
+
 public interface IStampService
 {
     // admin
@@ -23,6 +26,10 @@ public interface IStampService
     Task<List<Stamp>> StampsAsync(string? q, int? batchId);
     Task<List<LotteryReward>> RewardsAsync();
     Task<StampDash> DashboardAsync();
+    // đóng gói tem vào hộp (Map_IDInBox)
+    Task<List<Box>> BoxesAsync();
+    Task<Box?> GetBoxAsync(int id);
+    Task<PackResult> PackBoxAsync(string boxNo, int productId, IEnumerable<string> qrIds, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -89,6 +96,58 @@ public class StampService(AppDbContext db) : IStampService
             stamps.Count(s => s.Status == StampStatus.Activated),
             await db.ScanLogs.CountAsync(),
             byProduct);
+    }
+
+    // ── ĐÓNG GÓI TEM VÀO HỘP (Map_IDInBox) ───────────────────────────
+    public Task<List<Box>> BoxesAsync() =>
+        db.Boxes.Include(x => x.Product).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<Box?> GetBoxAsync(int id) =>
+        db.Boxes.Include(x => x.Product).Include(x => x.Stamps).ThenInclude(s => s.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Đóng gói danh sách tem (theo QrId) vào 1 hộp. Mô phỏng nghiệp vụ Map_IDInBox của EQR:
+    /// - Mọi tem phải tồn tại trong hệ thống.
+    /// - Tem đã thuộc hộp khác → từ chối (trừ khi cùng hộp đích).
+    /// - Nếu toàn bộ tem đã nằm trong đúng hộp này với cùng số lượng → coi như trùng, bỏ qua.
+    /// </summary>
+    public async Task<PackResult> PackBoxAsync(string boxNo, int productId, IEnumerable<string> qrIds, string createdBy)
+    {
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new PackResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Include(s => s.Box)
+            .Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new PackResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        // tem đã thuộc hộp khác
+        var inOtherBox = stamps.Where(s => s.BoxId != null && s.Box != null && s.Box.BoxNo != boxNo).ToList();
+        if (inOtherBox.Count > 0)
+            return new PackResult(false, $"{inOtherBox.Count} tem đã thuộc hộp khác: {string.Join(", ", inOtherBox.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        var box = await db.Boxes.FirstOrDefaultAsync(b => b.BoxNo == boxNo);
+        if (box == null)
+        {
+            box = new Box { BoxNo = boxNo, ProductId = productId, CreatedBy = createdBy };
+            db.Boxes.Add(box);
+            await db.SaveChangesAsync();
+        }
+
+        // trùng: tất cả tem đã nằm trong hộp này và số lượng khớp
+        var alreadyInBox = stamps.Count(s => s.BoxId == box.Id);
+        if (alreadyInBox == stamps.Count && box.Quantity == stamps.Count)
+            return new PackResult(true, "Các tem này đã được đóng vào hộp (bỏ qua).", box.Id, box.BoxNo, 0);
+
+        var now = DateTime.Now;
+        foreach (var s in stamps) { s.BoxId = box.Id; s.BoxedAt = now; }
+        box.Quantity = await db.Stamps.CountAsync(s => s.BoxId == box.Id);
+        await db.SaveChangesAsync();
+        return new PackResult(true, $"Đã đóng {stamps.Count} tem vào hộp {box.BoxNo}.", box.Id, box.BoxNo, stamps.Count);
     }
 
     // ── CONSUMER (công khai) ─────────────────────────────────────────
