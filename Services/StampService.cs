@@ -41,6 +41,9 @@ public record TraceEventResult(bool Ok, string Message, int Id, string EventNo, 
 /// <summary>Kết quả thao tác hóa đơn điện tử (nghiệp vụ Invoice_Invoice).</summary>
 public record InvoiceResult(bool Ok, string Message, int Id, string InvoiceCode, string? InvoiceNo);
 
+/// <summary>Kết quả kích hoạt bán hàng (nghiệp vụ Inv_InvVerifiedID_ActivateSales).</summary>
+public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Count);
+
 public interface IStampService
 {
     // admin
@@ -109,6 +112,11 @@ public interface IStampService
     Task<InvoiceResult> ApproveInvoiceAsync(int id, string approvedBy);
     Task<InvoiceResult> IssueInvoiceAsync(int id, string issuedBy);
     Task<InvoiceResult> CancelInvoiceAsync(int id, string? reason);
+    // kích hoạt bán hàng (Inv_InvVerifiedID_ActivateSales)
+    Task<List<SalesActivation>> SalesActivationsAsync();
+    Task<SalesActivation?> GetSalesActivationAsync(int id);
+    Task<SalesResult> ActivateSalesAsync(string saNo, int productId, string? customerCode, string? customerName,
+        DateTime salesDTime, IEnumerable<string> qrIds, string? remark, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -991,6 +999,84 @@ public class StampService(AppDbContext db) : IStampService
         inv.CancelReason = reason;
         await db.SaveChangesAsync();
         return new InvoiceResult(true, $"Đã hủy hóa đơn {inv.InvoiceCode}.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+    }
+
+    // ── KÍCH HOẠT BÁN HÀNG (Inv_InvVerifiedID_ActivateSales) ────────
+    public Task<List<SalesActivation>> SalesActivationsAsync() =>
+        db.SalesActivations.Include(x => x.Product).Include(x => x.Lines)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<SalesActivation?> GetSalesActivationAsync(int id) =>
+        db.SalesActivations.Include(x => x.Product).Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Kích hoạt bán hàng cho 1 tập tem. Mô phỏng nghiệp vụ
+    /// WAS_Inv_InvVerifiedID_ActivateSales_New20210614 của EQR (zTemp.cs):
+    /// - Phải có ít nhất 1 tem; mọi tem phải tồn tại trong hệ thống.
+    /// - Tem đã vô hiệu (Void) hoặc rách/vỡ (Broken) → từ chối.
+    /// - Tem đã kích hoạt bán hàng trước đó → từ chối (không kích hoạt trùng).
+    /// - Sinh 1 phiếu xuất nội bộ (RefType=INVOUT, tiền tố PXKHT) trỏ về khách
+    ///   hàng bán mặc định; đánh dấu từng tem FlagSales='1' + SalesDTime + CustomerCode.
+    /// </summary>
+    public async Task<SalesResult> ActivateSalesAsync(string saNo, int productId, string? customerCode,
+        string? customerName, DateTime salesDTime, IEnumerable<string> qrIds, string? remark, string createdBy)
+    {
+        var codes = (qrIds ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new SalesResult(false, "Chưa nhập mã tem nào.", 0, "", 0);
+
+        var stamps = await db.Stamps.Where(s => codes.Contains(s.QrId)).ToListAsync();
+
+        var missing = codes.Except(stamps.Select(s => s.QrId)).ToList();
+        if (missing.Count > 0)
+            return new SalesResult(false, $"Không tìm thấy {missing.Count} mã tem: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        var bad = stamps.Where(s => s.Status == StampStatus.Void || s.Status == StampStatus.Broken).ToList();
+        if (bad.Count > 0)
+            return new SalesResult(false, $"{bad.Count} tem đã vô hiệu/rách-vỡ, không thể kích hoạt bán: {string.Join(", ", bad.Take(10).Select(s => s.QrId))}", 0, "", 0);
+
+        // tem đã kích hoạt bán ở phiếu khác
+        var alreadySold = await db.SalesActivationLines.IgnoreQueryFilters()
+            .Where(l => codes.Contains(l.QrId)).Select(l => l.QrId).ToListAsync();
+        if (alreadySold.Count > 0)
+            return new SalesResult(false, $"{alreadySold.Count} tem đã được kích hoạt bán trước đó: {string.Join(", ", alreadySold.Take(10))}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(saNo)) saNo = $"PXKHT{DateTime.Now:yyMMddHHmmss}";
+        saNo = saNo.Trim();
+        if (await db.SalesActivations.AnyAsync(x => x.SaNo == saNo))
+            return new SalesResult(false, $"Mã phiếu {saNo} đã tồn tại.", 0, "", 0);
+
+        if (salesDTime == default) salesDTime = DateTime.Now;
+        var now = DateTime.Now;
+        var sa = new SalesActivation
+        {
+            SaNo = saNo,
+            RefNoSys = $"PXKHT.{now:yyyyMMdd.HHmmss}.0",   // đúng định dạng RefNoSys của EQR
+            RefType = "INVOUT",
+            ProductId = productId > 0 ? productId : stamps[0].ProductId,
+            CustomerCode = string.IsNullOrWhiteSpace(customerCode) ? null : customerCode.Trim(),
+            CustomerName = string.IsNullOrWhiteSpace(customerName) ? null : customerName.Trim(),
+            SalesDTime = salesDTime,
+            Remark = remark,
+            CreatedBy = createdBy
+        };
+        foreach (var s in stamps)
+        {
+            sa.Lines.Add(new SalesActivationLine { QrId = s.QrId, SalesDTime = salesDTime });
+            s.FlagSales = true;
+            s.SalesDTime = salesDTime;
+            s.CustomerCode = sa.CustomerCode;
+        }
+        sa.Quantity = stamps.Count;
+        db.SalesActivations.Add(sa);
+        await db.SaveChangesAsync();
+
+        // gán lại SalesActivationId cho tem (sau khi có Id phiếu)
+        foreach (var s in stamps) s.SalesActivationId = sa.Id;
+        await db.SaveChangesAsync();
+
+        return new SalesResult(true, $"Đã kích hoạt bán hàng {sa.SaNo} ({stamps.Count} tem).", sa.Id, sa.SaNo, stamps.Count);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

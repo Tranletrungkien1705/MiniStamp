@@ -36,6 +36,8 @@ public class AppDbContext : DbContext
     public DbSet<TraceEventSpec> TraceEventSpecs => Set<TraceEventSpec>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceDtl> InvoiceDtls => Set<InvoiceDtl>();
+    public DbSet<SalesActivation> SalesActivations => Set<SalesActivation>();
+    public DbSet<SalesActivationLine> SalesActivationLines => Set<SalesActivationLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -60,6 +62,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasOne(x => x.Box).WithMany(x => x.Stamps).HasForeignKey(x => x.BoxId);
             e.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId);
+            e.HasOne(x => x.SalesActivation).WithMany().HasForeignKey(x => x.SalesActivationId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Box>(e =>
@@ -175,6 +178,18 @@ public class AppDbContext : DbContext
         {
             e.HasOne(x => x.Invoice).WithMany(x => x.Lines).HasForeignKey(x => x.InvoiceId);
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SalesActivation>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SaNo }).IsUnique();   // mã phiếu duy nhất trong tenant
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SalesActivationLine>(e =>
+        {
+            e.HasIndex(x => x.QrId).IsUnique();   // 1 tem chỉ kích hoạt bán 1 lần
+            e.HasOne(x => x.SalesActivation).WithMany(x => x.Lines).HasForeignKey(x => x.SalesActivationId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

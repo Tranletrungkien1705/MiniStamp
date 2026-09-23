@@ -544,3 +544,34 @@ public class InvoiceController(IStampService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Kích hoạt bán hàng (nghiệp vụ Inv_InvVerifiedID_ActivateSales của EQR)
+public class SalesActivationController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.SalesActivationsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? saNo, int productId, string? customerCode, string? customerName,
+        DateTime salesDTime, string? remark, string? codes)
+    {
+        var list = (codes ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        var r = await svc.ActivateSalesAsync(saNo ?? "", productId, customerCode, customerName, salesDTime, list, remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var sa = await svc.GetSalesActivationAsync(id);
+        if (sa == null) return NotFound();
+        return View(sa);
+    }
+}

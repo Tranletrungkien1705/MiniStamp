@@ -106,6 +106,11 @@ public class Stamp : IOrgOwned
     public DateTime? ShippedAt { get; set; }
     public string? CustomerCode { get; set; }
 
+    // kích hoạt bán hàng (Inv_InvVerifiedID_ActivateSales) — tem đã bán cho đại lý/khách
+    public bool FlagSales { get; set; }              // FlagSales = '1' khi đã kích hoạt bán hàng
+    public DateTime? SalesDTime { get; set; }        // SalesDTime — mốc kích hoạt bán hàng
+    public int? SalesActivationId { get; set; }      // phiếu kích hoạt bán hàng đã ghi nhận tem này
+
     // quay thưởng
     public bool HasSpun { get; set; }
     public string? PrizeWon { get; set; }
@@ -114,6 +119,7 @@ public class Stamp : IOrgOwned
     public Product Product { get; set; } = null!;
     public Box? Box { get; set; }
     public Shipment? Shipment { get; set; }
+    public SalesActivation? SalesActivation { get; set; }
 }
 
 // ── Phiếu tem rách/vỡ (NG) — nghiệp vụ InvF_BrokenStamp của EQR ──────
@@ -196,6 +202,48 @@ public class ShipmentLine : IOrgOwned
 
     public Shipment Shipment { get; set; } = null!;
     public Product Product { get; set; } = null!;
+}
+
+// ── Kích hoạt bán hàng (Inv_InvVerifiedID_ActivateSales) ─────────────
+// Nghiệp vụ EQR (worker LIVE WAS_Inv_InvVerifiedID_ActivateSales_New20210614,
+// file zTemp.cs): bước (6b) vòng đời tem — đại lý/NPP xác nhận đã BÁN tem.
+// Khác với "xuất kho theo tem" (Inv_VerifiedIDInOut): phiếu này KHÔNG gắn
+// vận chuyển/đơn hàng nguồn, mà tự sinh 1 phiếu xuất nội bộ (RefType=INVOUT,
+// tiền tố PXKHT) trỏ về 1 khách hàng bán mặc định, rồi đánh dấu từng tem
+// FlagSales='1' + SalesDTime + CustomerCode.
+// Ràng buộc EQR: phải có ít nhất 1 tem; mọi tem phải tồn tại; tem đã vô hiệu
+// (Void)/rách-vỡ (Broken) bị từ chối; tem đã kích hoạt bán hàng trước đó bị
+// từ chối (không kích hoạt trùng).
+public class SalesActivation : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SaNo { get; set; } = "";          // mã phiếu kích hoạt bán hàng (duy nhất trong tenant)
+    public string RefNoSys { get; set; } = "";      // RefNoSys — mã phiếu xuất nội bộ tự sinh (PXKHT...)
+    public string RefType { get; set; } = "INVOUT";  // RefType — luôn INVOUT (đúng EQR)
+    public int ProductId { get; set; }
+    public string? CustomerCode { get; set; }        // khách hàng bán (mặc định của hệ thống)
+    public string? CustomerName { get; set; }
+    public DateTime SalesDTime { get; set; } = DateTime.Now;  // mốc kích hoạt bán hàng
+    public int Quantity { get; set; }                // số tem đã kích hoạt bán
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+    public List<SalesActivationLine> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu kích hoạt bán hàng (1 tem đã bán) ────────────
+public class SalesActivationLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SalesActivationId { get; set; }
+    public string QrId { get; set; } = "";          // mã tem đã kích hoạt bán
+    public DateTime SalesDTime { get; set; } = DateTime.Now;
+
+    public SalesActivation SalesActivation { get; set; } = null!;
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────
