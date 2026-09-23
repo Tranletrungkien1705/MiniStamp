@@ -102,3 +102,34 @@ public class BoxController(IStampService svc) : Controller
         return View(b);
     }
 }
+
+// Đóng gói hộp vào thùng (nghiệp vụ Map_Can của EQR)
+public class CartonController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.CartonsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int productId, string? canNo, string? boxNos)
+    {
+        var list = (boxNos ?? "").Split(new[] { '\n', '\r', ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (productId <= 0) { TempData["Error"] = "Chọn sản phẩm."; ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        if (string.IsNullOrWhiteSpace(canNo)) canNo = $"CAN{DateTime.Now:yyMMddHHmmss}";
+        var r = await svc.PackCartonAsync(canNo.Trim(), productId, list, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = await svc.ProductsAsync(); return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.CartonId });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var c = await svc.GetCartonAsync(id);
+        if (c == null) return NotFound();
+        return View(c);
+    }
+}

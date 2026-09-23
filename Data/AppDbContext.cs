@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<StampBatch> Batches => Set<StampBatch>();
     public DbSet<Box> Boxes => Set<Box>();
+    public DbSet<Carton> Cartons => Set<Carton>();
     public DbSet<Stamp> Stamps => Set<Stamp>();
     public DbSet<ScanLog> ScanLogs => Set<ScanLog>();
     public DbSet<LotteryReward> Rewards => Set<LotteryReward>();
@@ -45,6 +46,13 @@ public class AppDbContext : DbContext
         b.Entity<Box>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.BoxNo }).IsUnique();
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasOne(x => x.Carton).WithMany(x => x.Boxes).HasForeignKey(x => x.CartonId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Carton>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CanNo }).IsUnique();
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

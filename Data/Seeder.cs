@@ -55,6 +55,15 @@ public static class Seeder
             foreach (var s in firstFive) { s.BoxId = box.Id; s.BoxedAt = DateTime.Now; }
             box.Quantity = firstFive.Count;
             await db.SaveChangesAsync();
+
+            // 1 thùng mẫu: đóng hộp vừa tạo vào thùng để demo nghiệp vụ đóng thùng (Map_Can)
+            var carton = new Carton { CanNo = "CAN-SEED-001", ProductId = p1.Id, CreatedBy = "seed" };
+            db.Cartons.Add(carton);
+            await db.SaveChangesAsync();
+            box.CartonId = carton.Id;
+            box.CartonedAt = DateTime.Now;
+            carton.BoxCount = 1;
+            await db.SaveChangesAsync();
         }
     }
 
@@ -62,7 +71,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Stamps", "ScanLogs", "Rewards" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

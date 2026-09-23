@@ -52,8 +52,28 @@ public class Box : IOrgOwned
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    // đóng thùng: hộp thuộc thùng nào (null = chưa đóng thùng)
+    public int? CartonId { get; set; }
+    public DateTime? CartonedAt { get; set; }
+
     public Product Product { get; set; } = null!;
+    public Carton? Carton { get; set; }
     public List<Stamp> Stamps { get; set; } = [];
+}
+
+// ── Thùng (đóng gói N hộp vào 1 thùng — nghiệp vụ Map_Can của EQR) ────
+public class Carton : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CanNo { get; set; } = "";        // mã thùng (duy nhất trong tenant)
+    public int ProductId { get; set; }
+    public int BoxCount { get; set; }              // số hộp đã đóng vào thùng
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Product Product { get; set; } = null!;
+    public List<Box> Boxes { get; set; } = [];
 }
 
 // ── Tem (mỗi con tem = 1 QR duy nhất toàn cục) ───────────────────────

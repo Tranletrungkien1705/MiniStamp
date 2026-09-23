@@ -14,6 +14,9 @@ public record VerifyResult(bool Found, bool Genuine, string Title, string Messag
 /// <summary>Kết quả đóng gói tem vào hộp (nghiệp vụ Map_IDInBox).</summary>
 public record PackResult(bool Ok, string Message, int BoxId, string BoxNo, int Packed);
 
+/// <summary>Kết quả đóng gói hộp vào thùng (nghiệp vụ Map_Can).</summary>
+public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, int Packed);
+
 public interface IStampService
 {
     // admin
@@ -30,6 +33,10 @@ public interface IStampService
     Task<List<Box>> BoxesAsync();
     Task<Box?> GetBoxAsync(int id);
     Task<PackResult> PackBoxAsync(string boxNo, int productId, IEnumerable<string> qrIds, string createdBy);
+    // đóng gói hộp vào thùng (Map_Can)
+    Task<List<Carton>> CartonsAsync();
+    Task<Carton?> GetCartonAsync(int id);
+    Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -148,6 +155,58 @@ public class StampService(AppDbContext db) : IStampService
         box.Quantity = await db.Stamps.CountAsync(s => s.BoxId == box.Id);
         await db.SaveChangesAsync();
         return new PackResult(true, $"Đã đóng {stamps.Count} tem vào hộp {box.BoxNo}.", box.Id, box.BoxNo, stamps.Count);
+    }
+
+    // ── ĐÓNG GÓI HỘP VÀO THÙNG (Map_Can) ────────────────────────────
+    public Task<List<Carton>> CartonsAsync() =>
+        db.Cartons.Include(x => x.Product).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<Carton?> GetCartonAsync(int id) =>
+        db.Cartons.Include(x => x.Product).Include(x => x.Boxes).ThenInclude(b => b.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Đóng gói danh sách hộp (theo BoxNo) vào 1 thùng. Mô phỏng nghiệp vụ Map_Can của EQR:
+    /// - Mọi hộp phải tồn tại trong hệ thống.
+    /// - Hộp đã thuộc thùng khác → từ chối (trừ khi cùng thùng đích).
+    /// - Nếu toàn bộ hộp đã nằm trong đúng thùng này với cùng số lượng → coi như trùng, bỏ qua.
+    /// </summary>
+    public async Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy)
+    {
+        var codes = (boxNos ?? []).Select(c => (c ?? "").Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return new CartonResult(false, "Chưa nhập mã hộp nào.", 0, "", 0);
+
+        var boxes = await db.Boxes.Include(b => b.Carton)
+            .Where(b => codes.Contains(b.BoxNo)).ToListAsync();
+
+        var missing = codes.Except(boxes.Select(b => b.BoxNo)).ToList();
+        if (missing.Count > 0)
+            return new CartonResult(false, $"Không tìm thấy {missing.Count} mã hộp: {string.Join(", ", missing.Take(10))}", 0, "", 0);
+
+        // hộp đã thuộc thùng khác
+        var inOtherCarton = boxes.Where(b => b.CartonId != null && b.Carton != null && b.Carton.CanNo != canNo).ToList();
+        if (inOtherCarton.Count > 0)
+            return new CartonResult(false, $"{inOtherCarton.Count} hộp đã thuộc thùng khác: {string.Join(", ", inOtherCarton.Take(10).Select(b => b.BoxNo))}", 0, "", 0);
+
+        var carton = await db.Cartons.FirstOrDefaultAsync(c => c.CanNo == canNo);
+        if (carton == null)
+        {
+            carton = new Carton { CanNo = canNo, ProductId = productId, CreatedBy = createdBy };
+            db.Cartons.Add(carton);
+            await db.SaveChangesAsync();
+        }
+
+        // trùng: tất cả hộp đã nằm trong thùng này và số lượng khớp
+        var alreadyInCarton = boxes.Count(b => b.CartonId == carton.Id);
+        if (alreadyInCarton == boxes.Count && carton.BoxCount == boxes.Count)
+            return new CartonResult(true, "Các hộp này đã được đóng vào thùng (bỏ qua).", carton.Id, carton.CanNo, 0);
+
+        var now = DateTime.Now;
+        foreach (var b in boxes) { b.CartonId = carton.Id; b.CartonedAt = now; }
+        carton.BoxCount = await db.Boxes.CountAsync(b => b.CartonId == carton.Id);
+        await db.SaveChangesAsync();
+        return new CartonResult(true, $"Đã đóng {boxes.Count} hộp vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, boxes.Count);
     }
 
     // ── CONSUMER (công khai) ─────────────────────────────────────────

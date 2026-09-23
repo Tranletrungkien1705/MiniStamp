@@ -1,0 +1,22 @@
+@model List<Carton>
+@{ ViewData["Title"] = "Thùng tem"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Các thùng đã đóng gói</h6>
+        <a href="/Carton/Create" class="btn btn-sm btn-primary"><i class="bi bi-boxes me-1"></i>Đóng thùng</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã thùng</th><th>Sản phẩm</th><th class="text-end">SL hộp</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Carton/Detail/@c.Id'">
+                <td class="fw-semibold">@c.CanNo</td><td>@c.Product.Name</td>
+                <td class="text-end">@c.BoxCount.ToString("N0")</td>
+                <td class="small text-muted">@c.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có thùng nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
