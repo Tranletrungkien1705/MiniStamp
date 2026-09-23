@@ -1,0 +1,51 @@
+@model InventoryInFG
+@{
+    ViewData["Title"] = $"Phiếu nhập kho {Model.InvInNo}";
+    var total = Model.Lines.Sum(l => l.Qty);
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Phiếu nhập kho <span style="font-family:monospace">@Model.InvInNo</span></h5>
+            <div class="text-muted small">
+                @Model.Lines.Count dòng · tổng <b>@total.ToString("N0")</b> sản phẩm · tạo lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+            @if (Model.ApprovedAt != null) { <div class="text-muted small">Duyệt lúc @Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ApprovedBy</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            @if (Model.Status == "APPROVE") { <span class="badge bg-success">APPROVE</span> }
+            else if (Model.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+            else { <span class="badge bg-warning text-dark">PENDING</span> }
+            @if (Model.Status == "PENDING")
+            {
+                <form asp-action="Approve" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2-circle me-1"></i>Duyệt phiếu</button>
+                </form>
+            }
+            <a href="/InventoryIn" class="btn btn-sm btn-outline-primary">Danh sách phiếu</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Chi tiết nhập kho</h6>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Sản phẩm</th><th class="text-end">Số lượng</th><th>Ngày sản xuất</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td>@l.Product.Code — @l.Product.Name</td>
+                <td class="text-end">@l.Qty.ToString("N0")</td>
+                <td class="small text-muted">@l.ProductionDate.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot><tr><th colspan="2" class="text-end">Tổng</th><th class="text-end">@total.ToString("N0")</th><th></th></tr></tfoot>
+    </table>
+</div></div>

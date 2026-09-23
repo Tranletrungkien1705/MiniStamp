@@ -77,6 +77,13 @@ public static class Seeder
             }
             broken.Quantity = lastTwo.Count;
             await db.SaveChangesAsync();
+
+            // 1 phiếu nhập kho thành phẩm mẫu (InvF_InventoryInFG) — đã duyệt
+            var fg = new InventoryInFG { InvInNo = "PNK-SEED-001", Remark = "Nhập kho lô sản xuất mẫu", CreatedBy = "seed", Status = "APPROVE", ApprovedAt = DateTime.Now, ApprovedBy = "seed" };
+            fg.Lines.Add(new InventoryInFGDtl { ProductId = p1.Id, Qty = 1000, ProductionDate = DateTime.Today.AddDays(-10) });
+            fg.Lines.Add(new InventoryInFGDtl { ProductId = p3.Id, Qty = 200, ProductionDate = DateTime.Today.AddDays(-5) });
+            db.InventoryInFGs.Add(fg);
+            await db.SaveChangesAsync();
         }
     }
 
@@ -84,7 +91,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

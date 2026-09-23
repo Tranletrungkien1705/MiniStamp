@@ -1,0 +1,29 @@
+@model List<InventoryInFG>
+@{ ViewData["Title"] = "Nhập kho thành phẩm"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Phiếu nhập kho thành phẩm (FG)</h6>
+        <a href="/InventoryIn/Create" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Tạo phiếu nhập</a>
+    </div>
+    <p class="text-muted small">Ghi nhận thành phẩm nhập kho theo sản phẩm + ngày sản xuất. Phiếu tạo ở trạng thái <b>PENDING</b>, duyệt xong chuyển <b>APPROVE</b>.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã phiếu</th><th class="text-end">Số dòng</th><th class="text-end">Tổng SL</th><th>Trạng thái</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var f in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/InventoryIn/Detail/@f.Id'">
+                <td class="fw-semibold">@f.InvInNo</td>
+                <td class="text-end">@f.Lines.Count</td>
+                <td class="text-end">@f.Lines.Sum(l => l.Qty).ToString("N0")</td>
+                <td>
+                    @if (f.Status == "APPROVE") { <span class="badge bg-success">APPROVE</span> }
+                    else if (f.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+                    else { <span class="badge bg-warning text-dark">PENDING</span> }
+                </td>
+                <td class="small text-muted">@f.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có phiếu nhập kho nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

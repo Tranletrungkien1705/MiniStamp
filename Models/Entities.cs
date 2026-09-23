@@ -142,6 +142,36 @@ public class BrokenStampLine : IOrgOwned
 }
 
 // ── Nhật ký quét (truy vết) ──────────────────────────────────────────
+public class InventoryInFG : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvInNo { get; set; } = "";       // mã phiếu nhập (duy nhất trong tenant)
+    public string Status { get; set; } = "PENDING";  // PENDING / APPROVE / CANCEL
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+
+    public List<InventoryInFGDtl> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết phiếu nhập kho (1 sản phẩm + số lượng + ngày SX) ────
+public class InventoryInFGDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InventoryInFGId { get; set; }
+    public int ProductId { get; set; }
+    public int Qty { get; set; }                     // số lượng nhập
+    public DateTime ProductionDate { get; set; } = DateTime.Today;
+
+    public InventoryInFG InventoryInFG { get; set; } = null!;
+    public Product Product { get; set; } = null!;
+}
+
+// ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {
     public int Id { get; set; }

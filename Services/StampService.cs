@@ -20,6 +20,9 @@ public record CartonResult(bool Ok, string Message, int CartonId, string CanNo, 
 /// <summary>Kết quả ghi nhận phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp).</summary>
 public record BrokenResult(bool Ok, string Message, int BrokenStampId, string BsNo, int Count);
 
+/// <summary>Kết quả tạo/duyệt phiếu nhập kho thành phẩm (nghiệp vụ InvF_InventoryInFG).</summary>
+public record InvInResult(bool Ok, string Message, int Id, string InvInNo, int TotalQty);
+
 public interface IStampService
 {
     // admin
@@ -44,6 +47,11 @@ public interface IStampService
     Task<List<BrokenStamp>> BrokenStampsAsync();
     Task<BrokenStamp?> GetBrokenStampAsync(int id);
     Task<BrokenResult> ReportBrokenAsync(string bsNo, int productId, IEnumerable<string> qrIds, string? note, string createdBy);
+    // phiếu nhập kho thành phẩm (InvF_InventoryInFG)
+    Task<List<InventoryInFG>> InventoryInFGsAsync();
+    Task<InventoryInFG?> GetInventoryInFGAsync(int id);
+    Task<InvInResult> CreateInventoryInFGAsync(string invInNo, string? remark, IEnumerable<(int ProductId, int Qty, DateTime ProductionDate)> lines, string createdBy);
+    Task<InvInResult> ApproveInventoryInFGAsync(int id, string approvedBy);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -271,6 +279,66 @@ public class StampService(AppDbContext db) : IStampService
         bs.Quantity = await db.BrokenStampLines.CountAsync(l => l.BrokenStampId == bs.Id) + stamps.Count;
         await db.SaveChangesAsync();
         return new BrokenResult(true, $"Đã ghi nhận {stamps.Count} tem rách/vỡ vào phiếu {bs.BsNo}.", bs.Id, bs.BsNo, stamps.Count);
+    }
+
+    // ── PHIẾU NHẬP KHO THÀNH PHẨM (InvF_InventoryInFG) ──────────────
+    public Task<List<InventoryInFG>> InventoryInFGsAsync() =>
+        db.InventoryInFGs.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<InventoryInFG?> GetInventoryInFGAsync(int id) =>
+        db.InventoryInFGs.Include(x => x.Lines).ThenInclude(l => l.Product)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo phiếu nhập kho thành phẩm (FG). Mô phỏng nghiệp vụ InvF_InventoryInFG_Save của EQR:
+    /// - Mỗi dòng phải có sản phẩm hợp lệ và số lượng > 0.
+    /// - Phiếu mới ở trạng thái PENDING (chờ duyệt).
+    /// </summary>
+    public async Task<InvInResult> CreateInventoryInFGAsync(string invInNo, string? remark,
+        IEnumerable<(int ProductId, int Qty, DateTime ProductionDate)> lines, string createdBy)
+    {
+        var rows = (lines ?? []).Where(l => l.ProductId > 0 && l.Qty > 0).ToList();
+        if (rows.Count == 0) return new InvInResult(false, "Cần ít nhất 1 dòng có sản phẩm và số lượng > 0.", 0, "", 0);
+
+        var productIds = rows.Select(r => r.ProductId).Distinct().ToList();
+        var validIds = await db.Products.Where(p => productIds.Contains(p.Id)).Select(p => p.Id).ToListAsync();
+        var bad = productIds.Except(validIds).ToList();
+        if (bad.Count > 0) return new InvInResult(false, $"Sản phẩm không tồn tại: {string.Join(", ", bad)}", 0, "", 0);
+
+        if (string.IsNullOrWhiteSpace(invInNo)) invInNo = $"PNK{DateTime.Now:yyMMddHHmmss}";
+        invInNo = invInNo.Trim();
+        if (await db.InventoryInFGs.AnyAsync(x => x.InvInNo == invInNo))
+            return new InvInResult(false, $"Mã phiếu {invInNo} đã tồn tại.", 0, "", 0);
+
+        var fg = new InventoryInFG { InvInNo = invInNo, Remark = remark, CreatedBy = createdBy, Status = "PENDING" };
+        foreach (var r in rows)
+            fg.Lines.Add(new InventoryInFGDtl
+            {
+                ProductId = r.ProductId,
+                Qty = r.Qty,
+                ProductionDate = r.ProductionDate == default ? DateTime.Today : r.ProductionDate
+            });
+        db.InventoryInFGs.Add(fg);
+        await db.SaveChangesAsync();
+        return new InvInResult(true, $"Đã tạo phiếu nhập {fg.InvInNo} ({rows.Count} dòng, {rows.Sum(r => r.Qty)} SP).", fg.Id, fg.InvInNo, rows.Sum(r => r.Qty));
+    }
+
+    /// <summary>
+    /// Duyệt phiếu nhập kho. Mô phỏng nghiệp vụ InvF_InventoryInFG_Approve của EQR:
+    /// - Chỉ phiếu PENDING mới được duyệt.
+    /// - Duyệt xong: Status = APPROVE + ghi mốc thời gian/người duyệt.
+    /// </summary>
+    public async Task<InvInResult> ApproveInventoryInFGAsync(int id, string approvedBy)
+    {
+        var fg = await db.InventoryInFGs.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (fg == null) return new InvInResult(false, "Không tìm thấy phiếu nhập.", 0, "", 0);
+        if (fg.Status != "PENDING") return new InvInResult(false, $"Phiếu {fg.InvInNo} đang ở trạng thái {fg.Status}, không thể duyệt.", fg.Id, fg.InvInNo, 0);
+
+        fg.Status = "APPROVE";
+        fg.ApprovedAt = DateTime.Now;
+        fg.ApprovedBy = approvedBy;
+        await db.SaveChangesAsync();
+        return new InvInResult(true, $"Đã duyệt phiếu nhập {fg.InvInNo}.", fg.Id, fg.InvInNo, fg.Lines.Sum(l => l.Qty));
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)

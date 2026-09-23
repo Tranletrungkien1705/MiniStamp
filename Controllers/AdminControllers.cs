@@ -164,3 +164,49 @@ public class BrokenStampController(IStampService svc) : Controller
         return View(b);
     }
 }
+
+// Phiếu nhập kho thành phẩm (nghiệp vụ InvF_InventoryInFG của EQR)
+public class InventoryInController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.InventoryInFGsAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? invInNo, string? remark, int[]? productId, int[]? qty, DateTime[]? productionDate)
+    {
+        var products = await svc.ProductsAsync();
+        var lines = new List<(int, int, DateTime)>();
+        if (productId != null)
+            for (int i = 0; i < productId.Length; i++)
+            {
+                var q = (qty != null && i < qty.Length) ? qty[i] : 0;
+                var d = (productionDate != null && i < productionDate.Length) ? productionDate[i] : DateTime.Today;
+                if (productId[i] > 0 && q > 0) lines.Add((productId[i], q, d));
+            }
+        if (lines.Count == 0) { TempData["Error"] = "Cần ít nhất 1 dòng có sản phẩm và số lượng > 0."; ViewBag.Products = products; return View(); }
+        var r = await svc.CreateInventoryInFGAsync(invInNo ?? "", remark, lines, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = products; return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var fg = await svc.GetInventoryInFGAsync(id);
+        if (fg == null) return NotFound();
+        return View(fg);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id)
+    {
+        var r = await svc.ApproveInventoryInFGAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
