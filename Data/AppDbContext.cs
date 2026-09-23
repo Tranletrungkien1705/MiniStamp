@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<StampBatch> Batches => Set<StampBatch>();
     public DbSet<Box> Boxes => Set<Box>();
     public DbSet<Carton> Cartons => Set<Carton>();
+    public DbSet<StampPair> StampPairs => Set<StampPair>();
     public DbSet<Stamp> Stamps => Set<Stamp>();
     public DbSet<ScanLog> ScanLogs => Set<ScanLog>();
     public DbSet<LotteryReward> Rewards => Set<LotteryReward>();
@@ -76,6 +77,12 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.CanNo }).IsUnique();
             e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StampPair>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MainQrId }).IsUnique();   // 1 tem chính chỉ thuộc 1 cặp
+            e.HasIndex(x => new { x.OrgId, x.SubQrId }).IsUnique();    // 1 tem phụ chỉ thuộc 1 cặp
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<BrokenStamp>(e =>

@@ -1,0 +1,18 @@
+@{
+    ViewData["Title"] = "Ghép cặp tem";
+}
+<div class="card" style="max-width:720px"><div class="card-body">
+    <p class="text-muted small">Ghép 1 tem chính với 1 tem phụ thành 1 cặp 1:1 (nghiệp vụ <b>Map_StampPair</b>). Cả 2 tem phải tồn tại và chưa thuộc cặp nào.</p>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small text-muted">Mã tem chính *</label>
+                <input name="mainQrId" class="form-control" style="font-family:monospace" placeholder="A1B2C3D4E5F6" required /></div>
+            <div class="col-md-6"><label class="form-label small text-muted">Mã tem phụ *</label>
+                <input name="subQrId" class="form-control" style="font-family:monospace" placeholder="F6E5D4C3B2A1" required /></div>
+            <div class="col-12"><label class="form-label small text-muted">Ghi chú</label>
+                <input name="remark" class="form-control" placeholder="Tùy chọn" /></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-link-45deg me-1"></i>Ghép cặp</button> <a href="/StampPair" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

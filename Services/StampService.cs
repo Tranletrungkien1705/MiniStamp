@@ -41,6 +41,9 @@ public record TraceEventResult(bool Ok, string Message, int Id, string EventNo, 
 /// <summary>Kết quả thao tác hóa đơn điện tử (nghiệp vụ Invoice_Invoice).</summary>
 public record InvoiceResult(bool Ok, string Message, int Id, string InvoiceCode, string? InvoiceNo);
 
+/// <summary>Kết quả ghép cặp tem (nghiệp vụ Map_StampPair).</summary>
+public record PairResult(bool Ok, string Message, int Id, string MainQrId, string SubQrId);
+
 /// <summary>Kết quả kích hoạt bán hàng (nghiệp vụ Inv_InvVerifiedID_ActivateSales).</summary>
 public record SalesResult(bool Ok, string Message, int Id, string SaNo, int Count);
 
@@ -64,6 +67,10 @@ public interface IStampService
     Task<List<Carton>> CartonsAsync();
     Task<Carton?> GetCartonAsync(int id);
     Task<CartonResult> PackCartonAsync(string canNo, int productId, IEnumerable<string> boxNos, string createdBy);
+    // ghép cặp tem (Map_StampPair)
+    Task<List<StampPair>> StampPairsAsync();
+    Task<StampPair?> GetStampPairAsync(int id);
+    Task<PairResult> PairStampsAsync(string mainQrId, string subQrId, string? remark, string createdBy);
     // phiếu tem rách/vỡ (InvF_BrokenStamp)
     Task<List<BrokenStamp>> BrokenStampsAsync();
     Task<BrokenStamp?> GetBrokenStampAsync(int id);
@@ -287,6 +294,50 @@ public class StampService(AppDbContext db) : IStampService
         carton.BoxCount = await db.Boxes.CountAsync(b => b.CartonId == carton.Id);
         await db.SaveChangesAsync();
         return new CartonResult(true, $"Đã đóng {boxes.Count} hộp vào thùng {carton.CanNo}.", carton.Id, carton.CanNo, boxes.Count);
+    }
+
+    // ── GHÉP CẶP TEM (Map_StampPair) ────────────────────────────────
+    public Task<List<StampPair>> StampPairsAsync() =>
+        db.StampPairs.OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<StampPair?> GetStampPairAsync(int id) =>
+        db.StampPairs.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Ghép 1 tem chính với 1 tem phụ thành 1 cặp 1:1. Mô phỏng nghiệp vụ
+    /// WAS_Map_StampPair_Add_New20220415 của EQR (Template.cs):
+    /// - Cả 2 tem phải tồn tại trong hệ thống (IDNoNotExistInInvGen).
+    /// - Tem chính không được trùng tem phụ.
+    /// - Tem chính chưa thuộc cặp nào (ExistIDNoInOtherBox).
+    /// - Tem phụ chưa thuộc cặp nào (ExistIDNoInOtherBox).
+    /// </summary>
+    public async Task<PairResult> PairStampsAsync(string mainQrId, string subQrId, string? remark, string createdBy)
+    {
+        mainQrId = (mainQrId ?? "").Trim().ToUpperInvariant();
+        subQrId = (subQrId ?? "").Trim().ToUpperInvariant();
+        if (mainQrId.Length == 0 || subQrId.Length == 0)
+            return new PairResult(false, "Cần nhập cả mã tem chính và tem phụ.", 0, mainQrId, subQrId);
+        if (mainQrId == subQrId)
+            return new PairResult(false, "Tem chính và tem phụ không được trùng nhau.", 0, mainQrId, subQrId);
+
+        var codes = new[] { mainQrId, subQrId };
+        var found = await db.Stamps.Where(s => codes.Contains(s.QrId)).Select(s => s.QrId).ToListAsync();
+        var missing = codes.Except(found).ToList();
+        if (missing.Count > 0)
+            return new PairResult(false, $"Không tìm thấy mã tem: {string.Join(", ", missing)}", 0, mainQrId, subQrId);
+
+        // tem đã thuộc cặp khác (ở vai trò chính hoặc phụ)
+        var used = await db.StampPairs.IgnoreQueryFilters()
+            .Where(p => codes.Contains(p.MainQrId) || codes.Contains(p.SubQrId))
+            .Select(p => p.MainQrId == mainQrId || p.SubQrId == mainQrId ? p.MainQrId : p.SubQrId)
+            .ToListAsync();
+        if (used.Count > 0)
+            return new PairResult(false, $"Tem đã được ghép cặp trước đó: {string.Join(", ", used)}", 0, mainQrId, subQrId);
+
+        var pair = new StampPair { MainQrId = mainQrId, SubQrId = subQrId, Remark = remark, CreatedBy = createdBy };
+        db.StampPairs.Add(pair);
+        await db.SaveChangesAsync();
+        return new PairResult(true, $"Đã ghép cặp tem {mainQrId} ↔ {subQrId}.", pair.Id, mainQrId, subQrId);
     }
 
     // ── CONSUMER (công khai) ─────────────────────────────────────────

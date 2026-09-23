@@ -134,6 +134,30 @@ public class CartonController(IStampService svc) : Controller
     }
 }
 
+// Ghép cặp tem (nghiệp vụ Map_StampPair của EQR)
+public class StampPairController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.StampPairsAsync());
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? mainQrId, string? subQrId, string? remark)
+    {
+        var r = await svc.PairStampsAsync(mainQrId ?? "", subQrId ?? "", remark, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) return View();
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetStampPairAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+}
+
 // Phiếu tem rách/vỡ (nghiệp vụ InvF_BrokenStamp của EQR)
 public class BrokenStampController(IStampService svc) : Controller
 {

@@ -1,0 +1,24 @@
+@model List<StampPair>
+@{ ViewData["Title"] = "Ghép cặp tem"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Các cặp tem đã ghép</h6>
+        <a href="/StampPair/Create" class="btn btn-sm btn-primary"><i class="bi bi-link-45deg me-1"></i>Ghép cặp tem</a>
+    </div>
+    <p class="text-muted small">Nghiệp vụ <b>Map_StampPair</b> (EQR): ghép 1 tem chính với 1 tem phụ thành 1 cặp 1:1. Mỗi tem chỉ thuộc tối đa 1 cặp.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Tem chính</th><th>Tem phụ</th><th>Ghi chú</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var p in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/StampPair/Detail/@p.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@p.MainQrId</td>
+                <td style="font-family:monospace">@p.SubQrId</td>
+                <td class="small text-muted">@p.Remark</td>
+                <td class="small text-muted">@p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có cặp tem nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

@@ -78,6 +78,18 @@ public static class Seeder
             carton.BoxCount = 1;
             await db.SaveChangesAsync();
 
+            // 1 cặp tem mẫu (Map_StampPair) — ghép 2 tem đầu của lô thành 1 cặp 1:1
+            var pairTwo = batch.Stamps.Take(2).ToList();
+            if (pairTwo.Count == 2)
+            {
+                db.StampPairs.Add(new StampPair
+                {
+                    MainQrId = pairTwo[0].QrId, SubQrId = pairTwo[1].QrId,
+                    Remark = "Cặp tem đôi mẫu", CreatedBy = "seed"
+                });
+                await db.SaveChangesAsync();
+            }
+
             // 1 phiếu tem rách/vỡ mẫu: ghi nhận 2 tem cuối của lô là lỗi (InvF_BrokenStamp)
             var broken = new BrokenStamp { BsNo = "BS-SEED-001", ProductId = p1.Id, Note = "Tem rách khi dán nhãn", CreatedBy = "seed" };
             db.BrokenStamps.Add(broken);
@@ -239,7 +251,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "StampPairs", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

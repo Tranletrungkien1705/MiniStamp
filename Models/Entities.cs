@@ -76,6 +76,26 @@ public class Carton : IOrgOwned
     public List<Box> Boxes { get; set; } = [];
 }
 
+// ── Ghép cặp tem (Map_StampPair) — nghiệp vụ EQR ─────────────────────
+// Nghiệp vụ EQR (WAS_Map_StampPair_Add_New20220415, file Template.cs):
+// ghép 1 tem CHÍNH (MainQrId) với 1 tem PHỤ (SubQrId) thành 1 cặp 1:1.
+// Dùng cho tem đôi (tem chính + tem phụ dán kèm) — mỗi tem chỉ được
+// thuộc tối đa 1 cặp. Ràng buộc EQR:
+//  - Danh sách đầu vào không được trùng tem chính (IDNoInputNotUnique).
+//  - Danh sách đầu vào không được trùng tem phụ (BoxNoInputNotUnique).
+//  - Cả 2 tem phải tồn tại trong hệ thống (IDNoNotExistInInvGen).
+//  - Tem chính/phụ chưa được ghép cặp trước đó (ExistIDNoInOtherBox).
+public class StampPair : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MainQrId { get; set; } = "";   // tem chính (IDNo) — duy nhất trong tenant
+    public string SubQrId { get; set; } = "";    // tem phụ (BoxNo) — duy nhất trong tenant
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
 // ── Tem (mỗi con tem = 1 QR duy nhất toàn cục) ───────────────────────
 public class Stamp : IOrgOwned
 {
