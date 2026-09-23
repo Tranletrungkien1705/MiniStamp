@@ -351,6 +351,77 @@ public class OriginCatalog : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
+// ── Hóa đơn điện tử (Invoice_Invoice) — nghiệp vụ bước (8) vòng đời tem ─
+// EQR: hóa đơn điện tử kế thừa hệ TVAN (Invoice_Invoice + Dtl), cấp số từ
+// "mẫu hóa đơn" (Invoice_TempInvoice) có dải số StartInvoiceNo..EndInvoiceNo.
+// Vòng đời: PENDING → APPROVED (duyệt) → ISSUED (cấp số & phát hành) → CANCEL (hủy).
+// Ràng buộc EQR (Invoice_Invoice_SaveX / _Approved / _Cancel):
+//  - InvoiceCode bắt buộc + duy nhất.
+//  - Chỉ phiếu PENDING mới sửa/duyệt được; đã cấp số (InvoiceNo) thì không xóa.
+//  - Ngày hóa đơn không được ở tương lai.
+//  - Tổng thanh toán = tiền hàng + VAT.
+//  - Cấp số: lấy số kế tiếp trong dải của mẫu; hết dải ⇒ từ chối (InvalidQtyIssueRemain).
+public class Invoice : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceCode { get; set; } = "";   // mã hóa đơn nội bộ (duy nhất trong tenant)
+    public string? InvoiceNo { get; set; }            // số hóa đơn được cấp (chỉ sau khi phát hành)
+    public string Status { get; set; } = "PENDING";  // PENDING / APPROVED / ISSUED / CANCEL
+
+    // mẫu hóa đơn + dải số (Invoice_TempInvoice)
+    public string TInvoiceCode { get; set; } = "";    // mã mẫu hóa đơn
+    public long InvoiceNoStart { get; set; }          // StartInvoiceNo của mẫu
+    public long InvoiceNoEnd { get; set; }            // EndInvoiceNo của mẫu
+
+    // đơn hàng nguồn
+    public string? RefNo { get; set; }                // số tham chiếu
+    public string? Mst { get; set; }                  // MST người nộp thuế (đơn vị phát hành)
+    public string? PaymentMethodCode { get; set; }    // hình thức thanh toán
+
+    // bên mua (NNT = người nộp thuế / khách hàng)
+    public string? CustomerNntCode { get; set; }
+    public string? CustomerNntName { get; set; }
+    public string? CustomerNntAddress { get; set; }
+    public string? CustomerNntPhone { get; set; }
+    public string? CustomerNntEmail { get; set; }
+    public string? CustomerMst { get; set; }          // MST bên mua
+
+    public DateTime InvoiceDate { get; set; } = DateTime.Today;
+    public decimal TotalValInvoice { get; set; }      // tiền hàng (chưa VAT)
+    public decimal TotalValVat { get; set; }          // tiền thuế VAT
+    public decimal TotalValPmt { get; set; }          // tổng thanh toán = tiền hàng + VAT
+
+    public string? Remark { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+    public DateTime? IssuedAt { get; set; }
+    public string? IssuedBy { get; set; }
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelReason { get; set; }
+
+    public List<InvoiceDtl> Lines { get; set; } = [];
+}
+
+// ── Dòng chi tiết hóa đơn (Invoice_InvoiceDtl) — 1 mặt hàng ───────────
+public class InvoiceDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public int ProductId { get; set; }
+    public string PartCode { get; set; } = "";       // mã mặt hàng (Product.Code)
+    public string? UnitName { get; set; }              // đơn vị tính
+    public int Qty { get; set; }                       // số lượng
+    public decimal UnitPrice { get; set; }             // đơn giá
+    public decimal Amount { get; set; }                // thành tiền = Qty * UnitPrice
+
+    public Invoice Invoice { get; set; } = null!;
+    public Product Product { get; set; } = null!;
+}
+
 // ── Nhật ký quét (truy vết) ──────────────────────────
 public class ScanLog : IOrgOwned
 {

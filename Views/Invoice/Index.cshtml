@@ -1,0 +1,31 @@
+@model List<Invoice>
+@{ ViewData["Title"] = "Hóa đơn điện tử"; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Hóa đơn điện tử</h6>
+        <a href="/Invoice/Create" class="btn btn-sm btn-primary"><i class="bi bi-receipt me-1"></i>Tạo hóa đơn</a>
+    </div>
+    <p class="text-muted small">Vòng đời: <b>PENDING</b> (chờ duyệt) → <b>APPROVED</b> (đã duyệt) → <b>ISSUED</b> (đã cấp số &amp; phát hành) → <b>CANCEL</b> (hủy). Số hóa đơn cấp từ dải của mẫu.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã hóa đơn</th><th>Số HĐ</th><th>Bên mua</th><th class="text-end">Tổng thanh toán</th><th>Trạng thái</th><th>Tạo</th></tr></thead>
+        <tbody>
+        @foreach (var inv in Model)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Invoice/Detail/@inv.Id'">
+                <td class="fw-semibold" style="font-family:monospace">@inv.InvoiceCode</td>
+                <td>@(string.IsNullOrWhiteSpace(inv.InvoiceNo) ? "—" : inv.InvoiceNo)</td>
+                <td>@inv.CustomerNntName</td>
+                <td class="text-end">@inv.TotalValPmt.ToString("N0") đ</td>
+                <td>
+                    @if (inv.Status == "ISSUED") { <span class="badge bg-success">ISSUED</span> }
+                    else if (inv.Status == "APPROVED") { <span class="badge bg-info text-dark">APPROVED</span> }
+                    else if (inv.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+                    else { <span class="badge bg-warning text-dark">PENDING</span> }
+                </td>
+                <td class="small text-muted">@inv.CreatedAt.ToString("dd/MM/yyyy")</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có hóa đơn nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

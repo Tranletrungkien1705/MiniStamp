@@ -34,6 +34,8 @@ public class AppDbContext : DbContext
     public DbSet<TraceEventTypeKde> TraceEventTypeKdes => Set<TraceEventTypeKde>();
     public DbSet<TraceEvent> TraceEvents => Set<TraceEvent>();
     public DbSet<TraceEventSpec> TraceEventSpecs => Set<TraceEventSpec>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceDtl> InvoiceDtls => Set<InvoiceDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -162,6 +164,17 @@ public class AppDbContext : DbContext
         b.Entity<TraceEventSpec>(e =>
         {
             e.HasOne(x => x.TraceEvent).WithMany(x => x.Specs).HasForeignKey(x => x.TraceEventId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Invoice>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceCode }).IsUnique();   // mã hóa đơn duy nhất trong tenant
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceDtl>(e =>
+        {
+            e.HasOne(x => x.Invoice).WithMany(x => x.Lines).HasForeignKey(x => x.InvoiceId);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ScanLog>().HasQueryFilter(x => x.OrgId == _orgId);

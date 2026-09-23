@@ -1,0 +1,85 @@
+@model Invoice
+@{
+    ViewData["Title"] = $"Hóa đơn {Model.InvoiceCode}";
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1">Hóa đơn điện tử <span style="font-family:monospace">@Model.InvoiceCode</span>
+                @if (!string.IsNullOrWhiteSpace(Model.InvoiceNo)) { <span class="text-muted">· số @Model.InvoiceNo</span> }
+            </h5>
+            <div class="text-muted small">
+                @Model.Lines.Count dòng · tiền hàng <b>@Model.TotalValInvoice.ToString("N0") đ</b> · VAT @Model.TotalValVat.ToString("N0") đ · tổng TT <b>@Model.TotalValPmt.ToString("N0") đ</b>
+            </div>
+            <div class="text-muted small">
+                Ngày HĐ: @Model.InvoiceDate.ToString("dd/MM/yyyy")
+                @if (!string.IsNullOrWhiteSpace(Model.TInvoiceCode)) { <text> · Mẫu: @Model.TInvoiceCode (dải @Model.InvoiceNoStart–@Model.InvoiceNoEnd)</text> }
+                @if (!string.IsNullOrWhiteSpace(Model.Mst)) { <text> · MST: @Model.Mst</text> }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.CustomerNntName))
+            {
+                <div class="text-muted small">Bên mua: @Model.CustomerNntName @(string.IsNullOrWhiteSpace(Model.CustomerMst) ? "" : $"(MST {Model.CustomerMst})") @Model.CustomerNntAddress</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Remark)) { <div class="text-muted small">Ghi chú: @Model.Remark</div> }
+            @if (Model.ApprovedAt != null) { <div class="text-muted small">Duyệt lúc @Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.ApprovedBy</div> }
+            @if (Model.IssuedAt != null) { <div class="text-muted small">Phát hành lúc @Model.IssuedAt.Value.ToString("dd/MM/yyyy HH:mm") bởi @Model.IssuedBy</div> }
+            @if (Model.CancelledAt != null) { <div class="text-muted small">Hủy lúc @Model.CancelledAt.Value.ToString("dd/MM/yyyy HH:mm") @(string.IsNullOrWhiteSpace(Model.CancelReason) ? "" : $"· lý do: {Model.CancelReason}")</div> }
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            @if (Model.Status == "ISSUED") { <span class="badge bg-success">ISSUED</span> }
+            else if (Model.Status == "APPROVED") { <span class="badge bg-info text-dark">APPROVED</span> }
+            else if (Model.Status == "CANCEL") { <span class="badge bg-secondary">CANCEL</span> }
+            else { <span class="badge bg-warning text-dark">PENDING</span> }
+
+            @if (Model.Status == "PENDING")
+            {
+                <form asp-action="Approve" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2-circle me-1"></i>Duyệt hóa đơn</button>
+                </form>
+            }
+            @if (Model.Status == "APPROVED")
+            {
+                <form asp-action="Issue" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-send-check me-1"></i>Cấp số &amp; phát hành</button>
+                </form>
+            }
+            @if (Model.Status != "CANCEL")
+            {
+                <form asp-action="Cancel" asp-route-id="@Model.Id" method="post" class="d-flex gap-1" onsubmit="return confirm('Hủy hóa đơn này?');">
+                    @Html.AntiForgeryToken()
+                    <input name="reason" class="form-control form-control-sm" placeholder="Lý do hủy" style="width:150px" />
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Hủy</button>
+                </form>
+            }
+            <a href="/Invoice" class="btn btn-sm btn-outline-primary">Danh sách hóa đơn</a>
+        </div>
+    </div>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-1">Chi tiết hóa đơn</h6>
+    <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th>Mặt hàng</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th></tr></thead>
+        <tbody>
+        @{ var i = 0; }
+        @foreach (var l in Model.Lines)
+        {
+            i++;
+            <tr>
+                <td class="text-muted">@i</td>
+                <td>@l.PartCode — @l.Product.Name</td>
+                <td class="text-end">@l.Qty.ToString("N0")</td>
+                <td class="text-end">@l.UnitPrice.ToString("N0")</td>
+                <td class="text-end">@l.Amount.ToString("N0")</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot>
+            <tr><th colspan="4" class="text-end">Tiền hàng</th><th class="text-end">@Model.TotalValInvoice.ToString("N0")</th></tr>
+            <tr><th colspan="4" class="text-end">VAT</th><th class="text-end">@Model.TotalValVat.ToString("N0")</th></tr>
+            <tr><th colspan="4" class="text-end">Tổng thanh toán</th><th class="text-end">@Model.TotalValPmt.ToString("N0")</th></tr>
+        </tfoot>
+    </table>
+</div></div>

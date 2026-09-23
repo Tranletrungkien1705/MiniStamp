@@ -468,3 +468,79 @@ public class TraceController(IStampService svc) : Controller
         return View(ev);
     }
 }
+
+// Hóa đơn điện tử (nghiệp vụ Invoice_Invoice của EQR)
+public class InvoiceController(IStampService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.InvoicesAsync());
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Products = await svc.ProductsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? invoiceCode, string? tinvoiceCode, long invoiceNoStart, long invoiceNoEnd,
+        string? refNo, string? mst, string? paymentMethodCode, string? customerNntCode, string? customerNntName,
+        string? customerNntAddress, string? customerNntPhone, string? customerNntEmail, string? customerMst,
+        DateTime invoiceDate, decimal totalValVat, string? remark,
+        int[]? productId, int[]? qty, decimal[]? unitPrice)
+    {
+        var products = await svc.ProductsAsync();
+        var lines = new List<(int, int, decimal)>();
+        if (productId != null)
+            for (int i = 0; i < productId.Length; i++)
+            {
+                var q = (qty != null && i < qty.Length) ? qty[i] : 0;
+                var up = (unitPrice != null && i < unitPrice.Length) ? unitPrice[i] : 0m;
+                if (productId[i] > 0 && q > 0) lines.Add((productId[i], q, up));
+            }
+        if (lines.Count == 0) { TempData["Error"] = "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0."; ViewBag.Products = products; return View(); }
+
+        var header = new Invoice
+        {
+            InvoiceCode = invoiceCode ?? "", TInvoiceCode = tinvoiceCode ?? "",
+            InvoiceNoStart = invoiceNoStart, InvoiceNoEnd = invoiceNoEnd,
+            RefNo = refNo, Mst = mst, PaymentMethodCode = paymentMethodCode,
+            CustomerNntCode = customerNntCode, CustomerNntName = customerNntName, CustomerNntAddress = customerNntAddress,
+            CustomerNntPhone = customerNntPhone, CustomerNntEmail = customerNntEmail, CustomerMst = customerMst,
+            InvoiceDate = invoiceDate, TotalValVat = totalValVat, Remark = remark
+        };
+        var r = await svc.CreateInvoiceAsync(header, lines, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        if (!r.Ok) { ViewBag.Products = products; return View(); }
+        return RedirectToAction(nameof(Detail), new { id = r.Id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var inv = await svc.GetInvoiceAsync(id);
+        if (inv == null) return NotFound();
+        return View(inv);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id)
+    {
+        var r = await svc.ApproveInvoiceAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id)
+    {
+        var r = await svc.IssueInvoiceAsync(id, "web");
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var r = await svc.CancelInvoiceAsync(id, reason);
+        TempData[r.Ok ? "Success" : "Error"] = r.Message;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}

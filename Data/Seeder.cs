@@ -212,6 +212,26 @@ public static class Seeder
             ev.Specs.Add(new TraceEventSpec { CteCode = "HARVEST", KdeCode = "OPERATOR", KdeValue = "Nguyễn Văn A" });
             db.TraceEvents.Add(ev);
             await db.SaveChangesAsync();
+
+            // 1 hóa đơn điện tử mẫu (Invoice_Invoice) — đã phát hành (cấp số)
+            var inv = new Invoice
+            {
+                InvoiceCode = "HD-SEED-001", InvoiceNo = "1", Status = "ISSUED",
+                TInvoiceCode = "MAU01", InvoiceNoStart = 1, InvoiceNoEnd = 100,
+                RefNo = "DH-SEED-001", Mst = "2600123456", PaymentMethodCode = "TM",
+                CustomerNntCode = "KH001", CustomerNntName = "Đại lý Vật tư Nông nghiệp Phú Thọ",
+                CustomerNntAddress = "TP. Việt Trì, Phú Thọ", CustomerNntPhone = "0912345678",
+                CustomerMst = "2600987654", InvoiceDate = DateTime.Today.AddDays(-3),
+                TotalValVat = 500000, Remark = "Hóa đơn bán lô mẫu", CreatedBy = "seed",
+                ApprovedAt = DateTime.Now.AddDays(-3), ApprovedBy = "seed",
+                IssuedAt = DateTime.Now.AddDays(-3), IssuedBy = "seed"
+            };
+            inv.Lines.Add(new InvoiceDtl { ProductId = p1.Id, PartCode = p1.Code, UnitName = "Bao", Qty = 100, UnitPrice = 250000, Amount = 100 * 250000 });
+            inv.Lines.Add(new InvoiceDtl { ProductId = p2.Id, PartCode = p2.Code, UnitName = "Chai", Qty = 20, UnitPrice = 150000, Amount = 20 * 150000 });
+            inv.TotalValInvoice = inv.Lines.Sum(l => l.Amount);
+            inv.TotalValPmt = inv.TotalValInvoice + inv.TotalValVat;
+            db.Invoices.Add(inv);
+            await db.SaveChangesAsync();
         }
     }
 
@@ -219,7 +239,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs" };
+        var tables = new[] { "Products", "Batches", "Boxes", "Cartons", "Stamps", "ScanLogs", "Rewards", "BrokenStamps", "BrokenStampLines", "InventoryInFGs", "InventoryInFGDtls", "InventoryOutFGs", "InventoryOutFGDtls", "Shipments", "ShipmentLines", "ProductLives", "ProductionActives", "OriginCatalogs", "TraceEventTypes", "TraceKdes", "TraceEventTypeKdes", "TraceEvents", "TraceEventSpecs", "Invoices", "InvoiceDtls" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS ministamp.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",

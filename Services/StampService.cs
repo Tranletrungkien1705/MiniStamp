@@ -38,6 +38,9 @@ public record OriginResult(bool Ok, string Message, int Id, string Code);
 /// <summary>Kết quả lưu sự kiện truy xuất GS1 (nghiệp vụ Event_Event_Save).</summary>
 public record TraceEventResult(bool Ok, string Message, int Id, string EventNo, string Action);
 
+/// <summary>Kết quả thao tác hóa đơn điện tử (nghiệp vụ Invoice_Invoice).</summary>
+public record InvoiceResult(bool Ok, string Message, int Id, string InvoiceCode, string? InvoiceNo);
+
 public interface IStampService
 {
     // admin
@@ -99,6 +102,13 @@ public interface IStampService
     Task<TraceEvent?> GetTraceEventAsync(int id);
     Task<TraceEventResult> SaveTraceEventAsync(string? eventNo, string cteCode, string uiStyleCode, string? glnOrgCode,
         string? remark, IEnumerable<(string KdeCode, string KdeValue)> specs, string createdBy);
+    // hóa đơn điện tử (Invoice_Invoice)
+    Task<List<Invoice>> InvoicesAsync();
+    Task<Invoice?> GetInvoiceAsync(int id);
+    Task<InvoiceResult> CreateInvoiceAsync(Invoice header, IEnumerable<(int ProductId, int Qty, decimal UnitPrice)> lines, string createdBy);
+    Task<InvoiceResult> ApproveInvoiceAsync(int id, string approvedBy);
+    Task<InvoiceResult> IssueInvoiceAsync(int id, string issuedBy);
+    Task<InvoiceResult> CancelInvoiceAsync(int id, string? reason);
     // consumer (công khai, xuyên tenant theo QrId)
     Task<VerifyResult> VerifyAsync(string qrId, string? ip);
     Task<(bool ok, string msg)> ActivateAsync(string qrId, string phone);
@@ -853,6 +863,134 @@ public class StampService(AppDbContext db) : IStampService
         db.TraceEvents.Add(ev);
         await db.SaveChangesAsync();
         return new TraceEventResult(true, $"Đã tạo sự kiện {ev.EventNo} ({rows.Count} trường dữ liệu).", ev.Id, ev.EventNo, "ADD");
+    }
+
+    // ── HÓA ĐƠN ĐIỆN TỬ (Invoice_Invoice) ────────────────────────
+    public Task<List<Invoice>> InvoicesAsync() =>
+        db.Invoices.Include(x => x.Lines).OrderByDescending(x => x.CreatedAt).ToListAsync();
+
+    public Task<Invoice?> GetInvoiceAsync(int id) =>
+        db.Invoices.Include(x => x.Lines).ThenInclude(l => l.Product).FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Tạo hóa đơn điện tử. Mô phỏng nghiệp vụ Invoice_Invoice_Save_Root của EQR:
+    /// - InvoiceCode bắt buộc và duy nhất.
+    /// - Phải có ít nhất 1 dòng mặt hàng (SL > 0); mặt hàng phải tồn tại.
+    /// - Ngày hóa đơn không được ở tương lai.
+    /// - Thành tiền từng dòng = SL × đơn giá; Tổng thanh toán = tiền hàng + VAT.
+    /// - Phiếu mới ở trạng thái PENDING.
+    /// </summary>
+    public async Task<InvoiceResult> CreateInvoiceAsync(Invoice header,
+        IEnumerable<(int ProductId, int Qty, decimal UnitPrice)> lines, string createdBy)
+    {
+        var rows = (lines ?? []).Where(l => l.ProductId > 0 && l.Qty > 0).ToList();
+        if (rows.Count == 0) return new InvoiceResult(false, "Cần ít nhất 1 dòng có mặt hàng và số lượng > 0.", 0, "", null);
+
+        header.InvoiceCode = (header.InvoiceCode ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(header.InvoiceCode))
+            return new InvoiceResult(false, "Mã hóa đơn (InvoiceCode) không được để trống.", 0, "", null);
+
+        if (header.InvoiceDate == default) header.InvoiceDate = DateTime.Today;
+        if (header.InvoiceDate.Date > DateTime.Today)
+            return new InvoiceResult(false, "Ngày hóa đơn không được ở tương lai.", 0, header.InvoiceCode, null);
+
+        var productIds = rows.Select(r => r.ProductId).Distinct().ToList();
+        var products = await db.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+        var bad = productIds.Except(products.Select(p => p.Id)).ToList();
+        if (bad.Count > 0) return new InvoiceResult(false, $"Mặt hàng không tồn tại: {string.Join(", ", bad)}", 0, header.InvoiceCode, null);
+        var codeById = products.ToDictionary(p => p.Id, p => p.Code);
+
+        if (await db.Invoices.AnyAsync(x => x.InvoiceCode == header.InvoiceCode))
+            return new InvoiceResult(false, $"Mã hóa đơn {header.InvoiceCode} đã tồn tại.", 0, header.InvoiceCode, null);
+
+        header.Status = "PENDING";
+        header.CreatedBy = createdBy;
+        header.InvoiceNo = null;
+        foreach (var r in rows)
+            header.Lines.Add(new InvoiceDtl
+            {
+                ProductId = r.ProductId,
+                PartCode = codeById[r.ProductId],
+                Qty = r.Qty,
+                UnitPrice = r.UnitPrice,
+                Amount = r.Qty * r.UnitPrice
+            });
+        header.TotalValInvoice = header.Lines.Sum(l => l.Amount);
+        header.TotalValPmt = header.TotalValInvoice + header.TotalValVat;
+
+        db.Invoices.Add(header);
+        await db.SaveChangesAsync();
+        return new InvoiceResult(true, $"Đã tạo hóa đơn {header.InvoiceCode} ({rows.Count} dòng, tổng {header.TotalValPmt:N0} đ).", header.Id, header.InvoiceCode, null);
+    }
+
+    /// <summary>
+    /// Duyệt hóa đơn. Mô phỏng Invoice_Invoice_Approved của EQR: chỉ phiếu PENDING mới duyệt được.
+    /// </summary>
+    public async Task<InvoiceResult> ApproveInvoiceAsync(int id, string approvedBy)
+    {
+        var inv = await db.Invoices.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+        if (inv == null) return new InvoiceResult(false, "Không tìm thấy hóa đơn.", 0, "", null);
+        if (inv.Status != "PENDING")
+            return new InvoiceResult(false, $"Hóa đơn {inv.InvoiceCode} đang ở trạng thái {inv.Status}, không thể duyệt.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+
+        inv.Status = "APPROVED";
+        inv.ApprovedAt = DateTime.Now;
+        inv.ApprovedBy = approvedBy;
+        await db.SaveChangesAsync();
+        return new InvoiceResult(true, $"Đã duyệt hóa đơn {inv.InvoiceCode}.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+    }
+
+    /// <summary>
+    /// Cấp số & phát hành hóa đơn. Mô phỏng Invoice_Invoice_AllocatedInv / _Issued của EQR:
+    /// - Chỉ hóa đơn APPROVED mới phát hành được.
+    /// - Lấy số kế tiếp trong dải [InvoiceNoStart..InvoiceNoEnd] của mẫu hóa đơn.
+    /// - Hết dải ⇒ từ chối (InvalidQtyIssueRemain).
+    /// </summary>
+    public async Task<InvoiceResult> IssueInvoiceAsync(int id, string issuedBy)
+    {
+        var inv = await db.Invoices.FirstOrDefaultAsync(x => x.Id == id);
+        if (inv == null) return new InvoiceResult(false, "Không tìm thấy hóa đơn.", 0, "", null);
+        if (inv.Status != "APPROVED")
+            return new InvoiceResult(false, $"Hóa đơn {inv.InvoiceCode} đang ở trạng thái {inv.Status}, chỉ phát hành hóa đơn đã duyệt.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+        if (inv.InvoiceNoStart <= 0 || inv.InvoiceNoEnd < inv.InvoiceNoStart)
+            return new InvoiceResult(false, "Mẫu hóa đơn chưa có dải số hợp lệ (Start/End).", inv.Id, inv.InvoiceCode, null);
+
+        // số đã dùng của cùng mẫu (đã phát hành)
+        var used = await db.Invoices.Where(x => x.TInvoiceCode == inv.TInvoiceCode && x.Status == "ISSUED" && x.InvoiceNo != null)
+            .Select(x => x.InvoiceNo!).ToListAsync();
+        var usedSet = used.ToHashSet();
+        long? next = null;
+        for (long n = inv.InvoiceNoStart; n <= inv.InvoiceNoEnd; n++)
+            if (!usedSet.Contains(n.ToString())) { next = n; break; }
+        if (next == null)
+            return new InvoiceResult(false, $"Mẫu {inv.TInvoiceCode} đã hết số trong dải {inv.InvoiceNoStart}..{inv.InvoiceNoEnd}.", inv.Id, inv.InvoiceCode, null);
+
+        inv.InvoiceNo = next.Value.ToString();
+        inv.Status = "ISSUED";
+        inv.IssuedAt = DateTime.Now;
+        inv.IssuedBy = issuedBy;
+        await db.SaveChangesAsync();
+        return new InvoiceResult(true, $"Đã phát hành hóa đơn {inv.InvoiceCode} — số {inv.InvoiceNo}.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+    }
+
+    /// <summary>
+    /// Hủy hóa đơn. Mô phỏng Invoice_Invoice_Cancel của EQR:
+    /// - Không hủy hóa đơn đã hủy; hóa đơn đã phát hành phải ghi lý do.
+    /// </summary>
+    public async Task<InvoiceResult> CancelInvoiceAsync(int id, string? reason)
+    {
+        var inv = await db.Invoices.FirstOrDefaultAsync(x => x.Id == id);
+        if (inv == null) return new InvoiceResult(false, "Không tìm thấy hóa đơn.", 0, "", null);
+        if (inv.Status == "CANCEL")
+            return new InvoiceResult(false, $"Hóa đơn {inv.InvoiceCode} đã được hủy trước đó.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+        if (inv.Status == "ISSUED" && string.IsNullOrWhiteSpace(reason))
+            return new InvoiceResult(false, "Hóa đơn đã phát hành — cần ghi lý do hủy.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
+
+        inv.Status = "CANCEL";
+        inv.CancelledAt = DateTime.Now;
+        inv.CancelReason = reason;
+        await db.SaveChangesAsync();
+        return new InvoiceResult(true, $"Đã hủy hóa đơn {inv.InvoiceCode}.", inv.Id, inv.InvoiceCode, inv.InvoiceNo);
     }
 
     public async Task<VerifyResult> VerifyAsync(string qrId, string? ip)
